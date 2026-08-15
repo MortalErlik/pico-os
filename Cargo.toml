@@ -1,0 +1,33 @@
+[package]
+name = "pico_os"
+version = "0.1.0"
+edition = "2021"
+authors = ["Markus & Antigravity"]
+description = "A custom bare-metal OS in Rust & Assembly for Raspberry Pi Pico"
+
+[dependencies]
+cortex-m = "0.7"
+cortex-m-rt = "0.7"
+rp2040-boot2 = "0.3"
+rp2040-hal = { version = "0.10", features = ["rt", "critical-section-impl"] }
+rp-pico = "0.9"
+embedded-hal = "0.2.7"
+usb-device = "0.3"
+usbd-serial = "0.2"
+ssd1306 = "0.8"
+embedded-graphics = "0.8"
+panic-halt = "0.2"
+heapless = "0.8"
+critical-section = "1.2"
+
+[profile.dev]
+opt-level = 2
+debug = true
+lto = false
+
+[profile.release]
+opt-level = 3
+debug = false
+lto = true
+codegen-units = 1
+panic = "abort"
