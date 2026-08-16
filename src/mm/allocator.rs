@@ -89,6 +89,11 @@ impl CustomHeap {
         let _align = layout.align().max(ALIGN);
         let size = (layout.size() + (ALIGN - 1)) & !(ALIGN - 1);
 
+        // %95 RAM Pressure Guard: If allocation exceeds 95% threshold, trigger OOM killer to reclaim memory
+        if self.total_bytes > 0 && (self.used_bytes + size) >= (self.total_bytes * 95) / 100 {
+            let _ = crate::task::trigger_oom_killer();
+        }
+
         let mut curr = self.head;
 
         while !curr.is_null() {

@@ -19,3 +19,44 @@ pub fn init_heap() {
 pub fn get_stats() -> MemoryStats {
     HEAP_ALLOCATOR.stats()
 }
+
+pub const SWAP_TOTAL_BYTES: usize = 128 * 1024; // 128 KB Swap Partition
+pub const SWAP_TOTAL_PAGES: usize = 32; // 32 * 4KB = 128KB
+
+static mut SWAP_BITMAP: u32 = 0;
+static mut SWAP_USED_PAGES: usize = 0;
+
+/// Get swap usage: (used_bytes, total_bytes)
+pub fn get_swap_usage() -> (usize, usize) {
+    critical_section::with(|_| unsafe {
+        (SWAP_USED_PAGES * 4096, SWAP_TOTAL_BYTES)
+    })
+}
+
+pub fn allocate_swap_page() -> Option<u32> {
+    critical_section::with(|_| unsafe {
+        for i in 0..SWAP_TOTAL_PAGES {
+            let mask = 1u32 << i;
+            if SWAP_BITMAP & mask == 0 {
+                SWAP_BITMAP |= mask;
+                SWAP_USED_PAGES += 1;
+                return Some(i as u32);
+            }
+        }
+        None
+    })
+}
+
+pub fn free_swap_page(page_id: u32) {
+    if (page_id as usize) < SWAP_TOTAL_PAGES {
+        critical_section::with(|_| unsafe {
+            let mask = 1u32 << page_id;
+            if SWAP_BITMAP & mask != 0 {
+                SWAP_BITMAP &= !mask;
+                if SWAP_USED_PAGES > 0 {
+                    SWAP_USED_PAGES -= 1;
+                }
+            }
+        });
+    }
+}

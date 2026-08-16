@@ -337,25 +337,45 @@ extern "C" fn demo_worker_task(_arg: usize) {
 fn cmd_spawn(args: &[&str], ctx: &mut CommandContext) {
     let name = args.first().copied().unwrap_or("worker_task");
     let core = if args.len() > 1 {
-        args[1].parse::<u8>().unwrap_or(0).min(1)
+        if args[1].eq_ignore_ascii_case("auto") {
+            255
+        } else {
+            args[1].parse::<u8>().unwrap_or(255)
+        }
     } else {
-        1
+        255 // Auto SMP load-balance by default
     };
+
     let pid = task::spawn(name, core, 1024, demo_worker_task, 0);
-    let s = format!("\x1b[32mSpawned background task '{}' on CPU{} with PID {}\x1b[0m", name, core, pid);
-    ctx.println(&s);
+    if core >= 2 {
+        let s = format!("\x1b[32mSpawned task '{}' with PID {} (SMP Auto-Balanced)\x1b[0m", name, pid);
+        ctx.println(&s);
+    } else {
+        let s = format!("\x1b[32mSpawned task '{}' on CPU{} with PID {}\x1b[0m", name, core, pid);
+        ctx.println(&s);
+    }
 }
 
 fn cmd_free(_args: &[&str], ctx: &mut CommandContext) {
     let stats = mm::get_stats();
+    let (swap_used, swap_total) = mm::get_swap_usage();
+    let swap_free = swap_total.saturating_sub(swap_used);
+
     ctx.println("\x1b[1;37m               total        used        free      peak_used\x1b[0m");
-    let line = format!(
+    let mem_line = format!(
         "\x1b[1;36mMem:       {:>8} B  {:>8} B  {:>8} B     {:>8} B\x1b[0m",
         stats.total_bytes, stats.used_bytes, stats.free_bytes, stats.peak_used_bytes
     );
-    ctx.println(&line);
+    ctx.println(&mem_line);
+
+    let swap_line = format!(
+        "\x1b[1;33mSwap:      {:>8} B  {:>8} B  {:>8} B            --\x1b[0m",
+        swap_total, swap_used, swap_free
+    );
+    ctx.println(&swap_line);
+
     let counts = format!(
-        "\x1b[0;90mAllocations: {} | Frees: {} | Heap Capacity: 192 KB\x1b[0m",
+        "\x1b[0;90mAllocations: {} | Frees: {} | Guard: 95% RAM OOM-Protection Active\x1b[0m",
         stats.alloc_count, stats.free_count
     );
     ctx.println(&counts);

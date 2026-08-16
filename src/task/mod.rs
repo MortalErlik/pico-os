@@ -71,7 +71,13 @@ impl Scheduler {
         }
     }
 
-    pub fn spawn(&mut self, name: &str, core: u8, stack_size: usize, entry: extern "C" fn(usize), arg: usize) -> usize {
+    pub fn spawn(&mut self, name: &str, mut core: u8, stack_size: usize, entry: extern "C" fn(usize), arg: usize) -> usize {
+        // Smart SMP Core Selection: if core >= 2, pick the core with lower CPU load
+        if core >= 2 {
+            let (l0, l1) = unsafe { (CPU0_LOAD, CPU1_LOAD) };
+            core = if l1 < l0 { 1 } else { 0 };
+        }
+
         let pid = self.next_pid;
         self.next_pid += 1;
 
@@ -102,7 +108,8 @@ impl Scheduler {
     }
 
     pub fn kill(&mut self, pid: usize) -> bool {
-        if pid == 0 {
+        // Protect essential kernel and daemon processes (PID 1, 2, 3)
+        if pid <= 3 {
             return false;
         }
 
@@ -113,6 +120,26 @@ impl Scheduler {
             }
         }
         false
+    }
+
+    /// OOM-Killer: safely terminates the latest non-protected user task (PID > 3) to prevent kernel panic
+    pub fn trigger_oom_killer(&mut self) -> Option<usize> {
+        let mut target_idx = None;
+        let mut max_pid = 0;
+
+        for (i, t) in self.tasks.iter().enumerate() {
+            if t.pid > 3 && t.state != TaskState::Dead && t.pid > max_pid {
+                max_pid = t.pid;
+                target_idx = Some(i);
+            }
+        }
+
+        if let Some(idx) = target_idx {
+            self.tasks[idx].state = TaskState::Dead;
+            Some(self.tasks[idx].pid)
+        } else {
+            None
+        }
     }
 
     pub fn list_tasks(&self) -> Vec<TaskInfo> {
@@ -278,6 +305,16 @@ pub fn kill(pid: usize) -> bool {
             sched.kill(pid)
         } else {
             false
+        }
+    })
+}
+
+pub fn trigger_oom_killer() -> Option<usize> {
+    critical_section::with(|_| unsafe {
+        if let Some(ref mut sched) = SCHEDULER {
+            sched.trigger_oom_killer()
+        } else {
+            None
         }
     })
 }

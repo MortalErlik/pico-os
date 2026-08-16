@@ -81,8 +81,16 @@ impl HtopMonitor {
 
         // 5. Swap Partition Bar
         write_out("\x1b[1;36mSwap[\x1b[0m");
-        Self::render_bar(&mut write_out, 0, 100, 18, "\x1b[33m", "\x1b[33m", "\x1b[31m");
-        let swp_str = format!("\x1b[1;36m  0K/128K\x1b[0m]   \x1b[1;37mDisk: \x1b[1;33mApplication Paging\x1b[0m\x1b[K\r\n", );
+        let (swap_used, swap_total) = mm::get_swap_usage();
+        let swap_used_k = swap_used / 1024;
+        let swap_total_k = swap_total / 1024;
+        let swap_pct = if swap_total > 0 {
+            ((swap_used * 100) / swap_total).min(100) as u8
+        } else {
+            0
+        };
+        Self::render_bar(&mut write_out, swap_pct, 100, 18, "\x1b[33m", "\x1b[33m", "\x1b[31m");
+        let swp_str = format!("\x1b[1;36m{:>3}K/{:>3}K\x1b[0m]   \x1b[1;37mDisk: \x1b[1;33mApplication Paging\x1b[0m\x1b[K\r\n", swap_used_k, swap_total_k);
         write_out(&swp_str);
 
         // 6. True Disk Bar
