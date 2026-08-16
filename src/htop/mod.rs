@@ -76,7 +76,7 @@ impl HtopMonitor {
             0
         };
         Self::render_bar(&mut write_out, disk_pct, 100, 17, "\x1b[35m", "\x1b[33m", "\x1b[32m");
-        let disk_str = format!("\x1b[1;36m{:>4}K/{:>4}K\x1b[0m]   \x1b[1;37mDisk: \x1b[1;32m1.0M FlashFS \x1b[0;37m| \x1b[1;36m/data Partition\x1b[0m\r\n\r\n", fs_used_k, fs_total_k);
+        let disk_str = format!("\x1b[1;36m{:>4}K/{:>4}K\x1b[0m]   \x1b[1;37mDisk: \x1b[1;32m1.0M FlashFS \x1b[0;37m| \x1b[1;36mVFS Snapshot\x1b[0m\r\n\r\n", fs_used_k, fs_total_k);
         write_out(&disk_str);
 
         // Process Table Header (compact 45 columns, guaranteed no wrap/truncation)

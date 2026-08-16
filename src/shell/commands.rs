@@ -382,13 +382,13 @@ fn cmd_df(_args: &[&str], ctx: &mut CommandContext) {
 
 fn cmd_sync(_args: &[&str], ctx: &mut CommandContext) {
     fs::sync_fs();
-    ctx.println("\x1b[1;32m[ OK ] Persistent /data partition synchronized to Physical Flash.\x1b[0m");
+    ctx.println("\x1b[1;32m[ OK ] Persistent Virtual File System (VFS) synchronized to Physical Flash.\x1b[0m");
 }
 
 fn cmd_format(_args: &[&str], ctx: &mut CommandContext) {
-    ctx.println("Formatting 1.0MB Persistent Flash partition (/data)...");
+    ctx.println("Formatting 1.0MB Persistent Flash partition (VFS Snapshot)...");
     match fs::format_fs() {
-        Ok(_) => ctx.println("\x1b[1;32m[ OK ] Format complete! /data partition initialized on Flash.\x1b[0m"),
+        Ok(_) => ctx.println("\x1b[1;32m[ OK ] Format complete! VFS Snapshot initialized on Flash.\x1b[0m"),
         Err(_) => ctx.println("\x1b[31mFormat failed!\x1b[0m"),
     }
 }
