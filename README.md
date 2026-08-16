@@ -1,90 +1,131 @@
-# Pico OS: Custom Bare-Metal OS in Rust & ARM Assembly
+# 🍓 Pico-OS: Bare-Metal Dual-Core SMP Operating System in Rust & ARM Assembly
 
-Pico OS is a lightweight, bare-metal multitasking operating system designed and implemented from scratch for the **Raspberry Pi Pico (RP2040 Cortex-M0+)**, featuring custom memory management, an interactive Unix-like shell, an in-memory/flash Virtual File System (VFS), a preemptive task scheduler with Assembly context switching, an interactive live process monitor (`htop`), a full-screen text editor (`nano`), and hardware peripheral drivers for **SSD1306 OLED (I2C0)** and **ESP8266 ESP-01 (UART0)**.
+[![Language: Rust](https://img.shields.io/badge/Language-Rust%20%28no__std%29-orange.svg)](https://www.rust-lang.org/)
+[![Target: RP2040](https://img.shields.io/badge/Target-RP2040%20Cortex--M0%2B-blue.svg)](https://www.raspberrypi.com/products/rp2040/)
+[![Architecture: Dual-Core SMP](https://img.shields.io/badge/Arch-Dual--Core%20SMP-green.svg)]()
+[![License: MIT](https://img.shields.io/badge/License-MIT-purple.svg)]()
 
----
+**Pico-OS** is a lightweight, bare-metal Unix-like operating system designed and implemented from scratch in **Rust and ARM Assembly** for the **Raspberry Pi Pico (RP2040 Dual-Core Cortex-M0+)**. 
 
-## Architecture & Features
-
-### 1. Custom RAM Management (`src/mm/`)
-- Custom first-fit linked-list heap allocator implementing Rust's `GlobalAlloc` trait.
-- Automatic contiguous block coalescing upon deallocation to eliminate memory fragmentation.
-- Real-time memory allocation tracking: Total RAM, Allocated Bytes, Free Bytes, Peak Memory, and Allocation Count.
-- Accessible via the `free` command and `htop` dashboard.
-
-### 2. Preemptive Multitasking & Context Switching (`src/task/`)
-- ARM Cortex-M0+ assembly context switcher utilizing the `PendSV` interrupt handler.
-- Context save/restore for low (`r4-r7`) and high (`r8-r11`) registers using Thumb-1 instructions.
-- Round-Robin preemptive scheduler triggered by the 1000 Hz `SysTick` timer interrupt.
-- Task Control Block (TCB) with PID, state (`Ready`, `Running`, `Sleeping`, `Blocked`, `Dead`), stack usage tracking, and CPU cycle percentage.
-- Task lifecycle management: `spawn`, `sleep_ms`, `yield_now`, and `kill`.
-
-### 3. Virtual File System & Linux Commands (`src/fs/`, `src/shell/`)
-- Hierarchical Unix-style directory tree (`/`, `/bin`, `/etc`, `/home`, `/dev`, `/proc`).
-- Built-in Linux commands:
-  - **File Operations**: `ls`, `cd`, `pwd`, `mkdir`, `rm` (`-r`), `touch`, `cat`, `cp`, `mv`, `echo` (with `>` and `>>` redirection support).
-  - **Process & System**: `ps`, `kill`, `spawn`, `free`, `uptime`, `uname` (`-a`), `whoami`, `clear`, `reboot`.
-  - **Hardware Control**: `pin` (read/set/clear/toggle GPIOs), `i2c_scan` (I2C bus scanner).
-
-### 4. Interactive Live Process Monitor: `htop` (`src/htop/`)
-- ANSI color terminal dashboard.
-- Live graphical bar meters for CPU usage (Core 0) and RAM usage (Used vs Total).
-- Real-time task table showing PID, User, State, CPU%, Stack Depth, Max Stack, and Ticks.
-- Interactive keyboard controls:
-  - Press `k` or `K` to trigger interactive PID kill mode (`Signal SIGKILL`).
-  - Press `q`, `Q`, or `Esc` to cleanly exit back to the shell.
-
-### 5. Interactive Full-Screen Text Editor: `nano` (`src/editor/`)
-- VT100/ANSI full-screen terminal text editor.
-- Inverse-video header bar showing current filename and `[Modified]` indicator.
-- Dynamic scrolling, arrow key cursor navigation (`Up`, `Down`, `Left`, `Right`), backspace, and newline insertion.
-- Keyboard shortcuts:
-  - `Ctrl+O`: Save (WriteOut) buffer to filesystem.
-  - `Ctrl+K`: Cut line.
-  - `Ctrl+X`: Exit back to shell.
-
-### 6. Hardware Peripheral Support (`src/drivers/`)
-- **Dual Terminal I/O**: Shell is simultaneously active over USB CDC-ACM Serial (Micro-USB) and Hardware UART0 (GP0 TX / GP1 RX).
-- **SSD1306 OLED Display (I2C0 GP4/GP5)**: Real-time graphical dashboard showing CPU%, RAM usage bar, Task count, and Uptime.
-- **ESP-01 (ESP8266) Management**: Power, reset, and boot pin control (`GP2 RST`, `GP3 IO0`, `GP6 CH_PD`).
+It features True Symmetric Multiprocessing (SMP), dynamic load balancing across CPU0/CPU1, a custom heap allocator with 95% OOM-Killer protection, an in-memory Virtual File System (VFS) with delayed physical flash committing, interactive TUI applications (`tmux`, `htop`, `nano`, `calc`, `fetch`), and hardware drivers for OLED (I2C0) and ESP8266 (UART0).
 
 ---
 
-## Pinout Map
+## 🌟 Key Features
+
+### ⚡ 1. Dual-Core SMP Architecture & Task Scheduling
+* **True Symmetric Multiprocessing**: Core 0 runs the interactive shell and kernel daemons, while Core 1 operates as a real-time worker core.
+* **ARM Cortex-M0+ Assembly Context Switcher**: Custom Thumb-1 low (`r4-r7`) and high (`r8-r11`) register save/restore using `PendSV` interrupt.
+* **Dynamic SMP Load Balancing**: `Scheduler::spawn` automatically routes new tasks to the least loaded CPU core, with active task density tie-breaking.
+* **Preemption**: 1000 Hz `SysTick` timer interrupt for millisecond-precision round-robin scheduling.
+
+### 🧠 2. Memory Management & 95% OOM Guard
+* **First-Fit Linked-List Heap Allocator**: 192 KB total heap with automatic contiguous block coalescing upon deallocation.
+* **95% RAM OOM-Killer**: Automatically detects critical memory pressure (>95%) and terminates non-essential user tasks (PID > 3) while protecting kernel daemons.
+* **128 KB Swap Partition Tracker**: Live bitmap page tracker exposed through `free` and `htop`.
+
+### 💾 3. Dual-Mount Filesystem & Auto-Sync Journal
+* **Dual Partition Architecture**:
+  * `/` : Fast in-memory root filesystem (`tmpfs`).
+  * `/data` : 1.0 MB Persistent Physical Flash partition.
+* **Auto-Sync Journal**: Delayed auto-commit daemon syncs modified files to physical flash after 2.5s idle to minimize flash write wear.
+* **File Operations**: `ls`, `cd`, `pwd`, `mkdir`, `rm -r`, `touch`, `cat`, `cp`, `mv`, `echo` (with `>` and `>>` redirection), `df -h`, `sync`, `events`, `format`.
+
+### 🖥️ 4. Interactive Terminal Applications (TUI)
+* **`tmux` 4-Pane Split-Screen Multiplexer**:
+  * 1 to 4 split panes (Single, Horizontal, Vertical, Triple, and 2x2 Grid).
+  * Built-in split commands: `split-v` / `split right`, `split-h` / `split down`, `focus 1..4`.
+  * Keyboard shortcuts: `Ctrl+B %` / `v` (vertical), `Ctrl+B "` / `h` (horizontal), `Ctrl+B o` (cycle pane), `Ctrl+B 1..4`, `Ctrl+B x` (close), `Ctrl+B d` (detach).
+  * Live green status bar pinned at the bottom row.
+* **`htop` Live Process Monitor**:
+  * Real-time dual-core CPU% bars, RAM (Used/Total), VFS, Swap, and Raw Disk meters.
+  * Task table with interactive PID kill (`F9` / `k` / `K`).
+* **`calc` (or `bc`) Math Engine**:
+  * Supports `+`, `-`, `*`, `/`, `%`, `^`, `x` / `X` multiplication (`50x4 = 200`), implicit multiplication (`2(3+4)`).
+  * Functions: `sqrt`, `abs`, `pow`, `min`, `max`, `round`, `pi`, `e`, variable assignment (`x = 10`), and `ans`.
+* **`nano <file>` Text Editor**:
+  * Full-screen ANSI editor with scrolling, arrow-key navigation, `Ctrl+O` save, and `Ctrl+X` exit.
+* **`fetch` (or `neofetch`)**:
+  * System hardware specifications, uptime, tasks, memory/swap, cute colored ASCII Kitty logo, and 16-color ANSI test palette.
+
+### ⚙️ 5. Linux Service Manager (`service` / `systemctl`)
+* **Singleton Daemon Protection**: Prevents duplicate task instances unless forced with `-f`.
+* **Service Control**: `service <name> <start|stop|restart|status>` and `service list`.
+
+### 🔌 6. Hardware Peripherals
+* **Dual Terminal I/O**: Shell simultaneously active over USB CDC-ACM Serial and Hardware UART0.
+* **SSD1306 OLED Display (I2C0 GP4/GP5)**: Real-time graphical dashboard showing CPU%, RAM bar, and uptime.
+* **ESP-01 (ESP8266) Management**: Reset, boot, and power control (`GP2 RST`, `GP3 IO0`, `GP6 CH_PD`).
+
+---
+
+## 📌 Hardware Pinout Map
 
 | Physical Pin | Pico Pin | Connection | Function |
 | :--- | :--- | :--- | :--- |
-| **Pin 1** | GP0 | ESP-01 RXD / Serial TX | Pico → ESP Veri Gönderimi |
-| **Pin 2** | GP1 | ESP-01 TXD / Serial RX | ESP → Pico Veri Alımı |
-| **Pin 4** | GP2 | ESP-01 RST | Donanımsal Reset |
-| **Pin 5** | GP3 | ESP-01 IO0 | Boot / Flaşlama Seçimi |
-| **Pin 6** | GP4 | OLED SDA | I2C0 Veri Hattı |
-| **Pin 7** | GP5 | OLED SCL | I2C0 Saat Hattı |
-| **Pin 9** | GP6 | ESP-01 CH_PD | Çip Etkinleştirme / Uyku Kontrolü |
-| **Pin 36** | 3V3 (OUT) | OLED + ESP-01 VCC | 3.3V Güç Beslemesi |
-| **Pin 38** | GND | Ortak GND | Sistem Toprak Hattı |
-| **Pin 39** | VSYS | Güç Girişi + 1000 µF | Switch Çıkışı |
+| **Pin 1** | GP0 | ESP-01 RXD / Serial TX | Pico → ESP Serial TX |
+| **Pin 2** | GP1 | ESP-01 TXD / Serial RX | ESP → Pico Serial RX |
+| **Pin 4** | GP2 | ESP-01 RST | Hardware Reset |
+| **Pin 5** | GP3 | ESP-01 IO0 | Boot / Flash Mode |
+| **Pin 6** | GP4 | OLED SDA | I2C0 Data Line |
+| **Pin 7** | GP5 | OLED SCL | I2C0 Clock Line |
+| **Pin 9** | GP6 | ESP-01 CH_PD | Chip Enable / Sleep Control |
+| **Pin 36** | 3V3 (OUT) | OLED + ESP-01 VCC | 3.3V Power Output |
+| **Pin 38** | GND | Common GND | Ground |
+| **Pin 39** | VSYS | Power Input | 5V Power / Switch |
 
 ---
 
-## How to Flash to Raspberry Pi Pico
+## 🚀 Getting Started & Flashing
 
-1. Hold down the **BOOTSEL** button on your Raspberry Pi Pico and plug it into your computer via USB.
-2. The Pico will appear as a mass storage drive named `RPI-RP2`.
-3. Copy/Drag-and-drop the generated `pico_os.uf2` file onto the `RPI-RP2` drive:
-   ```bash
-   cp pico_os.uf2 /media/$USER/RPI-RP2/
-   ```
-4. The Pico will automatically reboot and start Pico OS!
+### Prerequisites
+* Rust toolchain with target `thumbv6m-none-eabi`:
+  ```bash
+  rustup target add thumbv6m-none-eabi
+  cargo install elf2uf2-rs --locked
+  ```
 
----
-
-## Connecting to the Interactive Shell
-
-Connect via any serial terminal (e.g. PuTTY, minicom, screen, or Arduino Serial Monitor) at **115200 baud**:
+### Build & Generate UF2
 ```bash
-# Linux:
+cargo build --release
+elf2uf2-rs target/thumbv6m-none-eabi/release/pico_os pico_os.uf2
+```
+
+### Flash to Raspberry Pi Pico
+1. Hold down the **BOOTSEL** button on the Raspberry Pi Pico while connecting USB.
+2. Mounts as `RPI-RP2` drive.
+3. Copy `pico_os.uf2`:
+   ```bash
+   cp pico_os.uf2 /run/media/$USER/RPI-RP2/
+   ```
+4. Pico reboots immediately into Pico-OS!
+
+---
+
+## 💻 Connecting via Serial Terminal
+
+Connect via any serial terminal at **115200 baud**:
+```bash
 picocom -b 115200 /dev/ttyACM0
 # or
 screen /dev/ttyACM0 115200
 ```
+
+```text
+  ____  _            ____   ____  
+ |  _ \(_) ___ ___  / __ \ / ___| 
+ | |_) | |/ __/ _ \| |  | |\___ \ 
+ |  __/| | (_| (_) | |__| | ___) |
+ |_|   |_|\___\___/ \____/ |____/ 
+ Custom Bare-Metal OS in Rust & Assembly on RP2040 Dual-Core SMP
+ Developed for Raspberry Pi Pico + ESP8266 + SSD1306 OLED
+ Apps & Tools: fetch | tmux | htop | calc | nano | service list
+ Type 'help' for command reference or 'tmux help' for split-screen guide.
+
+root@pico:/# fetch
+```
+
+---
+
+## 📜 License
+Licensed under the MIT License.
