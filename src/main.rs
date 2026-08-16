@@ -83,7 +83,7 @@ fn main() -> ! {
         pins.gpio0.into_function::<FunctionUart>().into_pull_type::<PullNone>(),
         pins.gpio1.into_function::<FunctionUart>().into_pull_type::<rp2040_hal::gpio::PullUp>(),
     );
-    let mut uart = UartPeripheral::new(pac.UART0, uart_pins, &mut pac.RESETS)
+    let uart = UartPeripheral::new(pac.UART0, uart_pins, &mut pac.RESETS)
         .enable(
             UartConfig::new(115200.Hz(), DataBits::Eight, None, StopBits::One),
             clocks.peripheral_clock.freq(),
@@ -122,7 +122,7 @@ fn main() -> ! {
     let mut mc = Multicore::new(&mut pac.PSM, &mut pac.PPB, &mut sio.fifo);
     let cores = mc.cores();
     let core1 = &mut cores[1];
-    let _ = core1.spawn(unsafe { &mut CORE1_STACK.mem }, move || {
+    let _ = core1.spawn(unsafe { &mut *core::ptr::addr_of_mut!(CORE1_STACK.mem) }, move || {
         core1_task();
     });
 

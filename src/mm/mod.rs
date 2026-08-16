@@ -12,7 +12,7 @@ pub fn init_heap() {
     static mut HEAP_MEM: [u8; HEAP_SIZE] = [0; HEAP_SIZE];
 
     unsafe {
-        HEAP_ALLOCATOR.init(HEAP_MEM.as_ptr() as usize, HEAP_SIZE);
+        HEAP_ALLOCATOR.init(core::ptr::addr_of_mut!(HEAP_MEM) as *mut u8 as usize, HEAP_SIZE);
     }
 }
 
