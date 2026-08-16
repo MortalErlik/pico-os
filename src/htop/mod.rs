@@ -43,13 +43,13 @@ impl HtopMonitor {
         write_out("\x1b[1;36m0[\x1b[0m");
         Self::render_bar(&mut write_out, cpu0_pct, 100, 20, "\x1b[32m", "\x1b[33m", "\x1b[31m");
         let running_cnt = tasks.iter().filter(|t| t.state == task::TaskState::Running).count();
-        let cpu0_str = format!("\x1b[1;36m{:>3}%\x1b[0m]   \x1b[1;37mTasks: \x1b[1;32m{}\x1b[0;37m total, \x1b[1;32m{}\x1b[0;37m running\r\n", cpu0_pct, tasks.len(), running_cnt);
+        let cpu0_str = format!("\x1b[1;36m{:>3}%\x1b[0m]   \x1b[1;37mTasks: \x1b[1;32m{}\x1b[0;37m total, \x1b[1;32m{}\x1b[0;37m running\x1b[K\r\n", cpu0_pct, tasks.len(), running_cnt);
         write_out(&cpu0_str);
 
         // 2. CPU1 Bar + Uptime
         write_out("\x1b[1;36m1[\x1b[0m");
         Self::render_bar(&mut write_out, cpu1_pct, 100, 20, "\x1b[32m", "\x1b[33m", "\x1b[31m");
-        let cpu1_str = format!("\x1b[1;36m{:>3}%\x1b[0m]   \x1b[1;37mUptime: \x1b[1;33m{:02}:{:02}:{:02}\x1b[0m\r\n", cpu1_pct, hours, mins % 60, secs);
+        let cpu1_str = format!("\x1b[1;36m{:>3}%\x1b[0m]   \x1b[1;37mUptime: \x1b[1;33m{:02}:{:02}:{:02}\x1b[0m\x1b[K\r\n", cpu1_pct, hours, mins % 60, secs);
         write_out(&cpu1_str);
 
         // 3. RAM / Memory Bar + Architecture
@@ -62,7 +62,7 @@ impl HtopMonitor {
             0
         };
         Self::render_bar(&mut write_out, mem_pct, 100, 18, "\x1b[34m", "\x1b[36m", "\x1b[35m");
-        let mem_str = format!("\x1b[1;36m{:>3}K/{:>3}K\x1b[0m]   \x1b[1;37mArch: \x1b[1;35mDual-Core SMP (RP2040)\x1b[0m\r\n", mem_used_k, mem_total_k);
+        let mem_str = format!("\x1b[1;36m{:>3}K/{:>3}K\x1b[0m]   \x1b[1;37mArch: \x1b[1;35mDual-Core SMP (RP2040)\x1b[0m\x1b[K\r\n", mem_used_k, mem_total_k);
         write_out(&mem_str);
 
         // 4. VFS Snapshot Bar
@@ -76,23 +76,23 @@ impl HtopMonitor {
             0
         };
         Self::render_bar(&mut write_out, disk_pct, 100, 18, "\x1b[35m", "\x1b[33m", "\x1b[32m");
-        let vfs_str = format!("\x1b[1;36m{:>3}K/{:>3}K\x1b[0m]   \x1b[1;37mDisk: \x1b[1;32mVFS Snapshot\x1b[0m\r\n", fs_used_k, fs_total_k);
+        let vfs_str = format!("\x1b[1;36m{:>3}K/{:>3}K\x1b[0m]   \x1b[1;37mDisk: \x1b[1;32mVFS Snapshot\x1b[0m\x1b[K\r\n", fs_used_k, fs_total_k);
         write_out(&vfs_str);
 
         // 5. Swap Partition Bar
         write_out("\x1b[1;36mSwap[\x1b[0m");
         Self::render_bar(&mut write_out, 0, 100, 18, "\x1b[33m", "\x1b[33m", "\x1b[31m");
-        let swp_str = format!("\x1b[1;36m  0K/128K\x1b[0m]   \x1b[1;37mDisk: \x1b[1;33mApplication Paging\x1b[0m\r\n", );
+        let swp_str = format!("\x1b[1;36m  0K/128K\x1b[0m]   \x1b[1;37mDisk: \x1b[1;33mApplication Paging\x1b[0m\x1b[K\r\n", );
         write_out(&swp_str);
 
         // 6. True Disk Bar
         write_out("\x1b[1;36mRaw [\x1b[0m");
         Self::render_bar(&mut write_out, 0, 100, 18, "\x1b[34m", "\x1b[33m", "\x1b[31m");
-        let raw_str = format!("\x1b[1;36m  0M/1.4M\x1b[0m]   \x1b[1;37mDisk: \x1b[1;35mTrue Block Device\x1b[0m\r\n\r\n", );
+        let raw_str = format!("\x1b[1;36m  0M/1.4M\x1b[0m]   \x1b[1;37mDisk: \x1b[1;35mTrue Block Device\x1b[0m\x1b[K\r\n\x1b[K\r\n", );
         write_out(&raw_str);
 
         // Process Table Header (compact 45 columns, guaranteed no wrap/truncation)
-        write_out("\x1b[7m PID CORE USER  STATE  CPU%  STACK  NAME\x1b[0m\r\n");
+        write_out("\x1b[7m PID CORE USER  STATE  CPU%  STACK  NAME\x1b[0m\x1b[K\r\n");
 
         for t in &tasks {
             let state_str = match t.state {
@@ -104,7 +104,7 @@ impl HtopMonitor {
             };
 
             let row = format!(
-                "{:>4} CPU{} root  {}  {:>3}%  {:>4}B  {}\r\n",
+                "{:>4} CPU{} root  {}  {:>3}%  {:>4}B  {}\x1b[K\r\n",
                 t.pid,
                 t.core,
                 state_str,
