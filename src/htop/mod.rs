@@ -65,8 +65,8 @@ impl HtopMonitor {
         let mem_str = format!("\x1b[1;36m{:>3}K/{:>3}K\x1b[0m]   \x1b[1;37mArch: \x1b[1;35mDual-Core SMP (RP2040)\x1b[0m\r\n", mem_used_k, mem_total_k);
         write_out(&mem_str);
 
-        // 4. Storage / LittleFS Bar + Disk Info
-        write_out("\x1b[1;36mDisk[\x1b[0m");
+        // 4. VFS Snapshot Bar
+        write_out("\x1b[1;36mVFS [\x1b[0m");
         let (fs_used, fs_total) = fs::get_fs_usage();
         let fs_used_k = fs_used / 1024;
         let fs_total_k = fs_total / 1024;
@@ -75,9 +75,21 @@ impl HtopMonitor {
         } else {
             0
         };
-        Self::render_bar(&mut write_out, disk_pct, 100, 17, "\x1b[35m", "\x1b[33m", "\x1b[32m");
-        let disk_str = format!("\x1b[1;36m{:>4}K/{:>4}K\x1b[0m]   \x1b[1;37mVFS: \x1b[1;32m256K \x1b[0;37m| \x1b[1;33mSwap: \x1b[1;32m128K \x1b[0;37m| \x1b[1;35mRaw: \x1b[1;32m1.4M\x1b[0m\r\n\r\n", fs_used_k, fs_total_k);
-        write_out(&disk_str);
+        Self::render_bar(&mut write_out, disk_pct, 100, 18, "\x1b[35m", "\x1b[33m", "\x1b[32m");
+        let vfs_str = format!("\x1b[1;36m{:>3}K/{:>3}K\x1b[0m]   \x1b[1;37mDisk: \x1b[1;32mVFS Snapshot\x1b[0m\r\n", fs_used_k, fs_total_k);
+        write_out(&vfs_str);
+
+        // 5. Swap Partition Bar
+        write_out("\x1b[1;36mSwap[\x1b[0m");
+        Self::render_bar(&mut write_out, 0, 100, 18, "\x1b[33m", "\x1b[33m", "\x1b[31m");
+        let swp_str = format!("\x1b[1;36m  0K/128K\x1b[0m]   \x1b[1;37mDisk: \x1b[1;33mApplication Paging\x1b[0m\r\n", );
+        write_out(&swp_str);
+
+        // 6. True Disk Bar
+        write_out("\x1b[1;36mRaw [\x1b[0m");
+        Self::render_bar(&mut write_out, 0, 100, 18, "\x1b[34m", "\x1b[33m", "\x1b[31m");
+        let raw_str = format!("\x1b[1;36m  0M/1.4M\x1b[0m]   \x1b[1;37mDisk: \x1b[1;35mTrue Block Device\x1b[0m\r\n\r\n", );
+        write_out(&raw_str);
 
         // Process Table Header (compact 45 columns, guaranteed no wrap/truncation)
         write_out("\x1b[7m PID CORE USER  STATE  CPU%  STACK  NAME\x1b[0m\r\n");
