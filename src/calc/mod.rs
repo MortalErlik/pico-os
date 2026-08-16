@@ -48,7 +48,7 @@ impl<'a> Lexer<'a> {
     }
 
     pub fn tokenize(&mut self) -> Result<Vec<Token>, String> {
-        let mut tokens = Vec::new();
+        let mut raw_tokens = Vec::new();
 
         while let Some(c) = self.peek() {
             if c.is_whitespace() {
@@ -57,25 +57,81 @@ impl<'a> Lexer<'a> {
             }
 
             match c {
-                '+' => { self.advance(); tokens.push(Token::Plus); }
-                '-' => { self.advance(); tokens.push(Token::Minus); }
-                '*' => { self.advance(); tokens.push(Token::Star); }
-                '/' => { self.advance(); tokens.push(Token::Slash); }
-                '%' => { self.advance(); tokens.push(Token::Percent); }
-                '^' => { self.advance(); tokens.push(Token::Caret); }
-                '(' => { self.advance(); tokens.push(Token::LParen); }
-                ')' => { self.advance(); tokens.push(Token::RParen); }
-                ',' => { self.advance(); tokens.push(Token::Comma); }
-                '=' => { self.advance(); tokens.push(Token::Equals); }
+                '+' => { self.advance(); raw_tokens.push(Token::Plus); }
+                '-' => { self.advance(); raw_tokens.push(Token::Minus); }
+                '*' => { self.advance(); raw_tokens.push(Token::Star); }
+                '/' => { self.advance(); raw_tokens.push(Token::Slash); }
+                '%' => { self.advance(); raw_tokens.push(Token::Percent); }
+                '^' => { self.advance(); raw_tokens.push(Token::Caret); }
+                '(' => { self.advance(); raw_tokens.push(Token::LParen); }
+                ')' => { self.advance(); raw_tokens.push(Token::RParen); }
+                ',' => { self.advance(); raw_tokens.push(Token::Comma); }
+                '=' => { self.advance(); raw_tokens.push(Token::Equals); }
                 '0'..='9' | '.' => {
                     let num = self.read_number()?;
-                    tokens.push(Token::Number(num));
+                    raw_tokens.push(Token::Number(num));
                 }
-                'a'..='z' | 'A'..='Z' | '_' => {
+                'x' | 'X' => {
+                    // Check if 'x' is used as a multiplication operator:
+                    // e.g. after a number or ')', or followed by a digit like 50x4
+                    let prev_is_term = match raw_tokens.last() {
+                        Some(Token::Number(_)) | Some(Token::RParen) => true,
+                        _ => false,
+                    };
+
+                    self.advance(); // consume 'x'
+                    let next_char = self.peek();
+                    let next_is_term = match next_char {
+                        Some('0'..='9') | Some('.') | Some('(') | Some(' ') | None => true,
+                        _ => false,
+                    };
+
+                    if prev_is_term && next_is_term {
+                        raw_tokens.push(Token::Star);
+                    } else {
+                        // Otherwise it's a variable or identifier starting with x
+                        let mut ident = String::from("x");
+                        while let Some(ch) = self.peek() {
+                            if ch.is_ascii_alphanumeric() || ch == '_' {
+                                ident.push(self.advance().unwrap());
+                            } else {
+                                break;
+                            }
+                        }
+                        if ident == "x" && prev_is_term {
+                            raw_tokens.push(Token::Star);
+                        } else {
+                            raw_tokens.push(Token::Ident(ident));
+                        }
+                    }
+                }
+                'a'..='w' | 'y'..='z' | 'A'..='W' | 'Y'..='Z' | '_' => {
                     let ident = self.read_ident();
-                    tokens.push(Token::Ident(ident));
+                    raw_tokens.push(Token::Ident(ident));
                 }
                 _ => return Err(format!("Unexpected character: '{}'", c)),
+            }
+        }
+
+        // Post-processing: Insert implicit multiplication (e.g. 2(3+4) -> 2*(3+4), (2+3)(4+5) -> (2+3)*(4+5))
+        let mut tokens = Vec::new();
+        for i in 0..raw_tokens.len() {
+            let curr = &raw_tokens[i];
+            tokens.push(curr.clone());
+
+            if i + 1 < raw_tokens.len() {
+                let next = &raw_tokens[i + 1];
+                let need_mult = match (curr, next) {
+                    (Token::Number(_), Token::LParen) => true,
+                    (Token::Number(_), Token::Ident(_)) => true,
+                    (Token::RParen, Token::LParen) => true,
+                    (Token::RParen, Token::Number(_)) => true,
+                    (Token::RParen, Token::Ident(_)) => true,
+                    _ => false,
+                };
+                if need_mult {
+                    tokens.push(Token::Star);
+                }
             }
         }
 
@@ -272,6 +328,9 @@ impl<'a> Parser<'a> {
         }
 
         let val = self.parse_expr()?;
+        if self.pos < self.tokens.len() {
+            return Err(format!("Unexpected trailing token: {:?}", self.tokens[self.pos]));
+        }
         self.ctx.ans = val;
         Ok(CalcOutput::Value(val))
     }
