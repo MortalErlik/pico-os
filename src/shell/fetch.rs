@@ -6,15 +6,18 @@ use alloc::vec::Vec;
 use crate::mm;
 use crate::task;
 
-const LOGO: [&str; 8] = [
-    "\x1b[1;32m  .~.   .~.  \x1b[0m",
-    "\x1b[1;32m / _ \\ / _ \\ \x1b[0m",
-    "\x1b[1;35m(( (_   _) ))\x1b[0m",
-    "\x1b[1;35m \x1b[1;32m/.-.\x1b[1;35m   \x1b[1;32m.-.\x1b[1;35m/ \x1b[0m",
-    "\x1b[1;35m  / / \\ / \\ \\  \x1b[0m",
-    "\x1b[1;35m | | | | | | \x1b[0m",
-    "\x1b[1;35m  \\ \\ / \\ / / \x1b[0m",
-    "\x1b[1;35m   `-'   `-'  \x1b[0m",
+const LOGO: [&str; 11] = [
+    "\x1b[1;35m   /\\_/\\   \x1b[0m",
+    "\x1b[1;36m  ( o.o )  \x1b[0m",
+    "\x1b[1;35m   > ^ <   \x1b[0m",
+    "\x1b[1;33m  /  ~  \\  \x1b[0m",
+    "\x1b[1;33m /|     |\\ \x1b[0m",
+    "\x1b[1;33m(_|     |_)\x1b[0m",
+    "\x1b[0;90m  (_____)  \x1b[0m",
+    "           ",
+    "           ",
+    "           ",
+    "           ",
 ];
 
 pub fn render_fetch<F: FnMut(&str)>(mut write_out: F) {
