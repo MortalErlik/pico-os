@@ -65,7 +65,11 @@ pub fn execute_command(line: &str, ctx: &mut CommandContext) {
         "calc" | "bc" => cmd_calc(args, ctx),
         "service" | "systemctl" => cmd_service(args, ctx),
         "neofetch" | "fetch" => cmd_fetch(args, ctx),
-        "tmux" => {} // Handled at top-level shell loop
+        "tmux" => {
+            if args.first() == Some(&"help") || args.first() == Some(&"--help") {
+                print_tmux_help(ctx);
+            }
+        }
         "disk_write" => cmd_disk_write(args, ctx),
         "disk_read" => cmd_disk_read(args, ctx),
         "uptime" => cmd_uptime(args, ctx),
@@ -106,39 +110,66 @@ fn handle_redirect(cmd_str: &str, file_name: &str, append: bool, ctx: &mut Comma
     }
 }
 
-fn cmd_help(_args: &[&str], ctx: &mut CommandContext) {
-    ctx.println("\x1b[1;36m=== Pico OS Dual-Core SMP Built-in Linux Commands ===\x1b[0m");
+fn print_tmux_help(ctx: &mut CommandContext) {
+    ctx.println("\x1b[1;36m=== Tmux 4-Pane Split-Screen Multiplexer Guide ===\x1b[0m");
+    ctx.println("  Launch: Type '\x1b[1;32mtmux\x1b[0m' to enter the multiplexer environment.");
+    ctx.println("\x1b[1;33mTerminal Split Commands (type inside any pane):\x1b[0m");
+    ctx.println("  \x1b[1;32msplit-v\x1b[0m (or 'split right') - Split active pane vertically (side-by-side)");
+    ctx.println("  \x1b[1;32msplit-h\x1b[0m (or 'split down')  - Split active pane horizontally (top/bottom)");
+    ctx.println("  \x1b[1;32mfocus <1..4>\x1b[0m (or 'pane N') - Switch input to Pane 1, 2, 3, or 4");
+    ctx.println("  \x1b[1;32mclear\x1b[0m                       - Clear active pane screen");
+    ctx.println("  \x1b[1;32mexit\x1b[0m                        - Close current pane (or exit if last)");
+    ctx.println("\x1b[1;33mKeyboard Shortcuts (Ctrl+B Prefix):\x1b[0m");
+    ctx.println("  \x1b[1;35mCtrl+B %\x1b[0m or \x1b[1;35mCtrl+B v\x1b[0m        - Split Vertical (Right)");
+    ctx.println("  \x1b[1;35mCtrl+B \"\x1b[0m or \x1b[1;35mCtrl+B h\x1b[0m        - Split Horizontal (Down)");
+    ctx.println("  \x1b[1;35mCtrl+B o\x1b[0m or \x1b[1;35mCtrl+B Tab\x1b[0m      - Cycle next active pane");
+    ctx.println("  \x1b[1;35mCtrl+B 1..4\x1b[0m                 - Jump directly to Pane 1, 2, 3, or 4");
+    ctx.println("  \x1b[1;35mCtrl+B x\x1b[0m                    - Close active pane");
+    ctx.println("  \x1b[1;35mCtrl+B d\x1b[0m                    - Detach from tmux back to main shell");
+}
+
+fn cmd_help(args: &[&str], ctx: &mut CommandContext) {
+    if args.first() == Some(&"tmux") {
+        print_tmux_help(ctx);
+        return;
+    }
+
+    ctx.println("\x1b[1;36m====================== Pico OS Command Reference ======================\x1b[0m");
+    
+    ctx.println("\x1b[1;33m[ APPLICATIONS & FULL-SCREEN TUI ]\x1b[0m");
+    ctx.println("  \x1b[1;32mfetch\x1b[0m (or neofetch) - Display hardware specs, cute ASCII Cat & ANSI palette");
+    ctx.println("  \x1b[1;32mtmux [help]\x1b[0m         - 4-Pane split-screen terminal multiplexer (split-v / split-h)");
+    ctx.println("  \x1b[1;32mhtop\x1b[0m (or top)       - Live Dual-Core process monitor & 3 storage bars");
+    ctx.println("  \x1b[1;32mcalc [expr]\x1b[0m (or bc) - Math calculator & REPL (sqrt, pow, pi, vars, ans)");
+    ctx.println("  \x1b[1;32mnano <file>\x1b[0m         - Full-screen text editor with keyboard navigation");
+
+    ctx.println("\x1b[1;33m[ PROCESS & SMP SERVICE MANAGEMENT ]\x1b[0m");
+    ctx.println("  \x1b[1;32mps\x1b[0m                  - List all active tasks across CPU0 & CPU1 with CPU%");
+    ctx.println("  \x1b[1;32mspawn [-f] <name>\x1b[0m   - Launch background task (Auto-balanced across CPU0/CPU1)");
+    ctx.println("  \x1b[1;32mservice <name> <cmd>\x1b[0m- Daemon manager: service <start|stop|restart|status|list>");
+    ctx.println("  \x1b[1;32mkill <pid|name>\x1b[0m     - Terminate task by PID or process name");
+    ctx.println("  \x1b[1;32mfree\x1b[0m                - Display 192KB RAM, 128KB Swap & 95% OOM-Guard status");
+
+    ctx.println("\x1b[1;33m[ FILESYSTEM & STORAGE ]\x1b[0m");
     ctx.println("  \x1b[1;32mls [path]\x1b[0m           - List directory contents with sizes and colors");
     ctx.println("  \x1b[1;32mcd <path>\x1b[0m           - Change current directory");
     ctx.println("  \x1b[1;32mpwd\x1b[0m                 - Print current working directory");
-    ctx.println("  \x1b[1;32mmkdir <path>\x1b[0m        - Create directory");
-    ctx.println("  \x1b[1;32mrm [-r] <path>\x1b[0m      - Remove file or directory");
-    ctx.println("  \x1b[1;32mtouch <path>\x1b[0m        - Create empty file");
-    ctx.println("  \x1b[1;32mcat <path>\x1b[0m          - Display file content");
-    ctx.println("  \x1b[1;32mcp <src> <dst>\x1b[0m      - Copy file");
-    ctx.println("  \x1b[1;32mmv <src> <dst>\x1b[0m      - Move/rename file");
+    ctx.println("  \x1b[1;32mmkdir / rm [-r]\x1b[0m     - Create directory or remove file/directory");
+    ctx.println("  \x1b[1;32mtouch / cat\x1b[0m         - Create empty file or display file contents");
+    ctx.println("  \x1b[1;32mcp / mv\x1b[0m             - Copy or move/rename files");
     ctx.println("  \x1b[1;32mecho [text]\x1b[0m         - Print text (supports > and >> redirection)");
     ctx.println("  \x1b[1;32mdf [-h]\x1b[0m             - Show Dual-Mount filesystems (Root tmpfs & /data Flash)");
-    ctx.println("  \x1b[1;32msync\x1b[0m                - Synchronize /data partition to Physical Flash");
-    ctx.println("  \x1b[1;32mevents\x1b[0m              - Show real-time VFS file events & delayed auto-sync journal");
-    ctx.println("  \x1b[1;32mformat\x1b[0m              - Format persistent /data partition on 1.0MB Flash");
-    ctx.println("  \x1b[1;33mps\x1b[0m                  - List all active tasks across CPU0 & CPU1");
-    ctx.println("  \x1b[1;33mkill <pid|name>\x1b[0m     - Terminate task by PID or process name");
-    ctx.println("  \x1b[1;33mspawn [-f] <name>\x1b[0m   - Launch task (auto-balanced, prevents accidental duplicates)");
-    ctx.println("  \x1b[1;33mservice <name> <cmd>\x1b[0m- System service manager (start, stop, restart, status, list)");
-    ctx.println("  \x1b[1;33mfree\x1b[0m                - Display 216KB RAM, Swap & 95% OOM Guard status");
-    ctx.println("  \x1b[1;33muptime\x1b[0m              - Display system running time");
-    ctx.println("  \x1b[1;33muname [-a]\x1b[0m          - Show kernel & Dual-Core SMP architecture info");
-    ctx.println("  \x1b[1;33mwhoami\x1b[0m              - Print current user (root)");
-    ctx.println("  \x1b[1;33mclear\x1b[0m               - Clear screen");
-    ctx.println("  \x1b[1;33mreboot\x1b[0m              - Restart system");
-    ctx.println("  \x1b[1;35mpin <r|s|c|t> <pin>\x1b[0m - Read/Set/Clear/Toggle GPIO pin");
-    ctx.println("  \x1b[1;35mi2c_scan\x1b[0m            - Scan I2C bus for OLED and devices");
-    ctx.println("  \x1b[1;34mhtop\x1b[0m                - Interactive live Dual-Core process monitor");
-    ctx.println("  \x1b[1;34mnano <file>\x1b[0m         - Interactive full-screen terminal text editor");
-    ctx.println("  \x1b[1;34mcalc [expr]\x1b[0m         - Math calculator (interactive REPL or one-shot expression)");
-    ctx.println("  \x1b[1;34mtmux\x1b[0m                - Terminal multiplexer with multi-window virtual tabs");
-    ctx.println("  \x1b[1;35mneofetch\x1b[0m (or fetch) - Display system hardware specs, logo & ANSI palette");
+    ctx.println("  \x1b[1;32msync\x1b[0m                - Force immediate flush of VFS snapshot to Flash");
+    ctx.println("  \x1b[1;32mevents\x1b[0m              - Real-time inotify journal & auto-sync event monitor");
+    ctx.println("  \x1b[1;32mformat\x1b[0m              - Format persistent /data partition on Flash");
+
+    ctx.println("\x1b[1;33m[ SYSTEM & HARDWARE UTILITIES ]\x1b[0m");
+    ctx.println("  \x1b[1;32mpin <r|s|c|t> <pin>\x1b[0m - Read / Set / Clear / Toggle GPIO pin");
+    ctx.println("  \x1b[1;32mi2c_scan\x1b[0m            - Scan I2C bus for OLED and connected sensors");
+    ctx.println("  \x1b[1;32muptime / uname [-a]\x1b[0m - System running time and Dual-Core SMP kernel info");
+    ctx.println("  \x1b[1;32mwhoami / clear\x1b[0m      - Print current user (root) or clear terminal screen");
+    ctx.println("  \x1b[1;32mreboot\x1b[0m              - Restart operating system");
+    ctx.println("\x1b[1;36m=======================================================================\x1b[0m");
 }
 
 fn cmd_ls(args: &[&str], ctx: &mut CommandContext) {

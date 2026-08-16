@@ -46,9 +46,10 @@ impl Shell {
         write_out(" |  __/| | (_| (_) | |__| | ___) |\r\n");
         write_out(" |_|   |_|\\___\\___/ \\____/ |____/ \r\n");
         write_out("\x1b[0m");
-        write_out("\x1b[1;37m Custom Bare-Metal OS in Rust & Assembly on RP2040\x1b[0m\r\n");
+        write_out("\x1b[1;37m Custom Bare-Metal OS in Rust & Assembly on RP2040 Dual-Core SMP\x1b[0m\r\n");
         write_out("\x1b[0;90m Developed for Raspberry Pi Pico + ESP8266 + SSD1306 OLED\x1b[0m\r\n");
-        write_out("\x1b[0;33m Type 'help' to see available commands or 'nano readme.txt' to edit.\x1b[0m\r\n\r\n");
+        write_out("\x1b[1;36m Apps & Tools: \x1b[1;33mfetch\x1b[0m | \x1b[1;33mtmux\x1b[0m | \x1b[1;33mhtop\x1b[0m | \x1b[1;33mcalc\x1b[0m | \x1b[1;33mnano\x1b[0m | \x1b[1;33mservice list\x1b[0m\r\n");
+        write_out("\x1b[0;32m Type '\x1b[1;32mhelp\x1b[0;32m' for command reference or '\x1b[1;32mtmux help\x1b[0;32m' for split-screen guide.\x1b[0m\r\n\r\n");
         self.print_prompt(write_out);
     }
 
