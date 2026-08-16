@@ -58,6 +58,9 @@ pub fn execute_command(line: &str, ctx: &mut CommandContext) {
         "kill" => cmd_kill(args, ctx),
         "spawn" => cmd_spawn(args, ctx),
         "free" => cmd_free(args, ctx),
+        "df" => cmd_df(args, ctx),
+        "sync" => cmd_sync(args, ctx),
+        "format" => cmd_format(args, ctx),
         "uptime" => cmd_uptime(args, ctx),
         "uname" => cmd_uname(args, ctx),
         "whoami" => cmd_whoami(args, ctx),
@@ -87,7 +90,7 @@ fn handle_redirect(cmd_str: &str, file_name: &str, append: bool, ctx: &mut Comma
             Vec::new()
         };
         final_content.extend_from_slice(buffer.as_bytes());
-        fs.write_file(file_name, final_content)
+        fs.write_file(file_name, &final_content)
     });
 
     if let Err(e) = res {
@@ -108,6 +111,9 @@ fn cmd_help(_args: &[&str], ctx: &mut CommandContext) {
     ctx.println("  \x1b[1;32mcp <src> <dst>\x1b[0m      - Copy file");
     ctx.println("  \x1b[1;32mmv <src> <dst>\x1b[0m      - Move/rename file");
     ctx.println("  \x1b[1;32mecho [text]\x1b[0m         - Print text (supports > and >> redirection)");
+    ctx.println("  \x1b[1;32mdf [-h]\x1b[0m             - Show Dual-Mount filesystems (Root tmpfs & /data Flash)");
+    ctx.println("  \x1b[1;32msync\x1b[0m                - Synchronize /data partition to Physical Flash");
+    ctx.println("  \x1b[1;32mformat\x1b[0m              - Format persistent /data partition on 1.0MB Flash");
     ctx.println("  \x1b[1;33mps\x1b[0m                  - List all active tasks across CPU0 & CPU1");
     ctx.println("  \x1b[1;33mkill <pid>\x1b[0m          - Terminate task by PID");
     ctx.println("  \x1b[1;33mspawn <name> [core]\x1b[0m - Launch a background task on CPU0 or CPU1");
@@ -202,10 +208,10 @@ fn cmd_touch(args: &[&str], ctx: &mut CommandContext) {
     }
     for &file in args {
         let res = fs::with_fs(|fs| {
-            if fs.find_node(file).is_ok() {
+            if fs.read_file(file).is_ok() {
                 Ok(())
             } else {
-                fs.create_file(file, Vec::new())
+                fs.write_file(file, &[])
             }
         });
         if let Err(e) = res {
@@ -343,10 +349,48 @@ fn cmd_free(_args: &[&str], ctx: &mut CommandContext) {
     );
     ctx.println(&line);
     let counts = format!(
-        "\x1b[0;90mAllocations: {} | Frees: {} | Heap Capacity: 216 KB\x1b[0m",
+        "\x1b[0;90mAllocations: {} | Frees: {} | Heap Capacity: 192 KB\x1b[0m",
         stats.alloc_count, stats.free_count
     );
     ctx.println(&counts);
+}
+
+fn cmd_df(_args: &[&str], ctx: &mut CommandContext) {
+    let (flash_used, flash_total) = fs::get_fs_usage();
+    let flash_free = flash_total.saturating_sub(flash_used);
+    let flash_pct = if flash_total > 0 { (flash_used * 100) / flash_total } else { 0 };
+
+    let mem = mm::get_stats();
+    let root_used = mem.used_bytes;
+    let root_total: usize = 64 * 1024;
+    let root_free = root_total.saturating_sub(root_used);
+    let root_pct = if root_total > 0 { (root_used * 100) / root_total } else { 0 };
+
+    ctx.println("\x1b[1;36mFilesystem      Size  Used  Avail Use% Mounted on\x1b[0m");
+    let out = format!(
+        "\x1b[1;33mrootfs\x1b[0m            64K  {:>3}K   {:>3}K {:>3}% /\r\n\x1b[1;32m/dev/flash\x1b[0m      {:>4}K {:>4}K  {:>4}K {:>3}% /data\r\n\x1b[1;34mproc\x1b[0m            216K    0K  216K   0% /proc\r\n\x1b[1;35mdev\x1b[0m               4K    0K    4K   0% /dev",
+        root_used / 1024,
+        root_free / 1024,
+        root_pct,
+        flash_total / 1024,
+        flash_used / 1024,
+        flash_free / 1024,
+        flash_pct
+    );
+    ctx.println(&out);
+}
+
+fn cmd_sync(_args: &[&str], ctx: &mut CommandContext) {
+    fs::sync_fs();
+    ctx.println("\x1b[1;32m[ OK ] Persistent /data partition synchronized to Physical Flash.\x1b[0m");
+}
+
+fn cmd_format(_args: &[&str], ctx: &mut CommandContext) {
+    ctx.println("Formatting 1.0MB Persistent Flash partition (/data)...");
+    match fs::format_fs() {
+        Ok(_) => ctx.println("\x1b[1;32m[ OK ] Format complete! /data partition initialized on Flash.\x1b[0m"),
+        Err(_) => ctx.println("\x1b[31mFormat failed!\x1b[0m"),
+    }
 }
 
 fn cmd_uptime(_args: &[&str], ctx: &mut CommandContext) {

@@ -235,7 +235,7 @@ impl NanoEditor {
             buffer.extend_from_slice(line.as_bytes());
             buffer.push(b'\n');
         }
-        let _ = fs::with_fs(|fs| fs.write_file(&self.filename, buffer));
+        let _ = fs::with_fs(|fs| fs.write_file(&self.filename, &buffer));
         self.modified = false;
     }
 }

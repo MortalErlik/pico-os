@@ -31,7 +31,6 @@ impl HtopMonitor {
 
         let tasks = task::get_tasks();
         let mem = mm::get_stats();
-        let fs_bytes = fs::get_fs_usage();
         let uptime_ticks = task::get_uptime_ticks();
         let uptime_secs = uptime_ticks / 1000;
         let mins = uptime_secs / 60;
@@ -66,12 +65,18 @@ impl HtopMonitor {
         let mem_str = format!("\x1b[1;36m{:>3}K/{:>3}K\x1b[0m]   \x1b[1;37mArch: \x1b[1;35mDual-Core SMP (RP2040)\x1b[0m\r\n", mem_used_k, mem_total_k);
         write_out(&mem_str);
 
-        // 4. Storage / VFS Bar + Disk Info
+        // 4. Storage / LittleFS Bar + Disk Info
         write_out("\x1b[1;36mDisk[\x1b[0m");
-        let disk_nominal_limit = 64 * 1024; // 64 KB VFS nominal threshold
-        let disk_pct = ((fs_bytes * 100) / disk_nominal_limit).min(100) as u8;
+        let (fs_used, fs_total) = fs::get_fs_usage();
+        let fs_used_k = fs_used / 1024;
+        let fs_total_k = fs_total / 1024;
+        let disk_pct = if fs_total > 0 {
+            ((fs_used * 100) / fs_total).min(100) as u8
+        } else {
+            0
+        };
         Self::render_bar(&mut write_out, disk_pct, 100, 17, "\x1b[35m", "\x1b[33m", "\x1b[32m");
-        let disk_str = format!("\x1b[1;36m{:>4}B/64K\x1b[0m]   \x1b[1;37mDisk: \x1b[1;32m2.0M Flash \x1b[0;37m| \x1b[1;36mIn-Memory VFS\x1b[0m\r\n\r\n", fs_bytes);
+        let disk_str = format!("\x1b[1;36m{:>4}K/{:>4}K\x1b[0m]   \x1b[1;37mDisk: \x1b[1;32m1.0M FlashFS \x1b[0;37m| \x1b[1;36m/data Partition\x1b[0m\r\n\r\n", fs_used_k, fs_total_k);
         write_out(&disk_str);
 
         // Process Table Header (compact 45 columns, guaranteed no wrap/truncation)

@@ -124,6 +124,9 @@ fn main() -> ! {
         core1_task();
     });
 
+    // Notify flash driver that Core 1 is running
+    fs::flash::CORE1_SPAWNED.store(true, core::sync::atomic::Ordering::SeqCst);
+
     // 9. Configure USB CDC-ACM Serial Device (Right before loop to ensure instant poll response!)
     let usb_bus = UsbBusAllocator::new(UsbBus::new(
         pac.USBCTRL_REGS,
@@ -149,21 +152,23 @@ fn main() -> ! {
         // Helper to safely write data longer than 64 bytes to USB without freezing
         macro_rules! write_out {
             ($s:expr) => {{
-                let mut b = $s.as_bytes();
-                let mut retries = 0;
-                while !b.is_empty() && retries < 100 {
-                    match serial.write(b) {
-                        Ok(n) if n > 0 => {
-                            b = &b[n..];
-                            retries = 0;
-                        }
-                        _ => {
-                            let _ = usb_dev.poll(&mut [&mut serial]);
-                            retries += 1;
+                let _ = uart.write_raw($s.as_bytes());
+                if usb_dev.state() == usb_device::device::UsbDeviceState::Configured {
+                    let mut b = $s.as_bytes();
+                    let mut retries = 0;
+                    while !b.is_empty() && retries < 10000 {
+                        match serial.write(b) {
+                            Ok(n) if n > 0 => {
+                                b = &b[n..];
+                                retries = 0;
+                            }
+                            _ => {
+                                let _ = usb_dev.poll(&mut [&mut serial]);
+                                retries += 1;
+                            }
                         }
                     }
                 }
-                let _ = uart.write_full_blocking($s.as_bytes());
             }};
         }
 
@@ -209,11 +214,17 @@ fn main() -> ! {
 /// Core 1 Real-Time Multiprocessing Worker Entry Point
 fn core1_task() -> ! {
     loop {
+        // Safely check and handle flash write lockouts while executing from RAM
+        fs::flash::core1_check_flash_lockout();
+
         // Track real-time activity for Core 1 (idle when waiting)
         task::report_core1_tick(false);
 
-        // Real-time task work or background loop
-        cortex_m::asm::delay(1_250_000); // 10ms delay (125 MHz clock)
+        // Real-time task work or background loop (10ms)
+        for _ in 0..100 {
+            fs::flash::core1_check_flash_lockout();
+            cortex_m::asm::delay(12_500); // 100 microseconds delay
+        }
     }
 }
 

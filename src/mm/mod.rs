@@ -8,7 +8,7 @@ pub static HEAP_ALLOCATOR: LockedHeap = LockedHeap::empty();
 /// Initializes the global heap in SRAM.
 /// On RP2040, we allocate 216 KB of SRAM for the operating system heap.
 pub fn init_heap() {
-    const HEAP_SIZE: usize = 216 * 1024; // 216 KB
+    const HEAP_SIZE: usize = 192 * 1024; // 192 KB (leaves 64KB for stacks & DMA)
     static mut HEAP_MEM: [u8; HEAP_SIZE] = [0; HEAP_SIZE];
 
     unsafe {
