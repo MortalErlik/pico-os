@@ -2,5 +2,6 @@ target/
 backup_*/
 *.uf2
 .DS_Store
+tools/
 *.swp
 *~
