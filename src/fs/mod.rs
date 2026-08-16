@@ -128,9 +128,9 @@ pub fn format_fs() -> Result<(), FsError> {
 
 /// Get filesystem usage: (flash_used_bytes, flash_total_bytes)
 pub fn get_fs_usage() -> (usize, usize) {
-    let total_flash_bytes = 1024 * 1024; // 1.0 MB Flash Partition for /data
+    let total_flash_bytes = 1024 * 1024; // 1.0 MB Flash Partition
     let used_bytes = with_fs(|fs| {
-        if let Ok(node) = fs.find_node("/data") {
+        if let Ok(node) = fs.find_node("/") {
             node.total_recursive_size()
         } else {
             0
@@ -203,9 +203,9 @@ impl FileSystem {
         // Magic header
         data.extend_from_slice(&flash::FLASH_MAGIC.to_le_bytes());
 
-        // Collect all files and directories in `/data`
+        // Collect all files and directories in `/` (skipping virtual dirs)
         let mut entries: Vec<(String, bool, Vec<u8>)> = Vec::new();
-        self.collect_entries_recursive("/data", &mut entries);
+        self.collect_entries_recursive("/", &mut entries);
 
         let count = entries.len() as u32;
         data.extend_from_slice(&count.to_le_bytes());
@@ -231,6 +231,11 @@ impl FileSystem {
                 } else {
                     format!("{}/{}", dir_path, entry.name)
                 };
+
+                // Skip virtual directories from being serialized to flash
+                if full_path == "/proc" || full_path == "/dev" {
+                    continue;
+                }
 
                 if entry.is_dir {
                     entries.push((full_path.clone(), true, Vec::new()));
