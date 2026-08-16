@@ -7,6 +7,12 @@
 
 **Pico-OS** is a lightweight, bare-metal Unix-like operating system designed and implemented from scratch in **Rust and ARM Assembly** for the **Raspberry Pi Pico (RP2040 Dual-Core Cortex-M0+)**. 
 
+> ### 💸 *"Tired of modern OS bloat eating 16 GB of RAM just to idle? Tired of spending $2,000 on a laptop just to run 400 systemd background services and a 40 GB kernel?"*
+>
+> **Say no more.** Why sell a kidney for hardware when you can run a **preemptive, dual-core SMP Unix-like workstation** on a **$4 Raspberry Pi Pico** with 264 KB of RAM, a full terminal multiplexer (`tmux`), live process monitor (`htop`), mathematical CAS (`calc`), text editor (`nano`), and an ASCII kitty (`fetch`)—all packed into an ultra-compact **70 KB** binary with zero dependencies? 
+>
+> Welcome to **Pico-OS**: The ultimate cure for modern software bloat. 🚀
+
 It features True Symmetric Multiprocessing (SMP), dynamic load balancing across CPU0/CPU1, a custom heap allocator with 95% OOM-Killer protection, a dual-mount Virtual File System (VFS) with delayed physical flash committing, and full-featured interactive TUI applications (`tmux`, `htop`, `nano`, `calc`, `fetch`).
 
 ---
