@@ -224,40 +224,80 @@ The following peripheral integrations are in active development:
 
 ---
 
-## 🚀 Getting Started & Flashing
+## 🚀 Quick Start Guide: Installation & Flashing
 
-### Prerequisites
-* Rust toolchain with target `thumbv6m-none-eabi`:
-  ```bash
-  rustup target add thumbv6m-none-eabi
-  cargo install elf2uf2-rs --locked
-  ```
+Follow these simple steps to flash and run Pico-OS on your Raspberry Pi Pico in less than 2 minutes:
 
-### Build & Generate UF2
+### Step 1: Install Build Toolchain (Optional if using prebuilt UF2)
 ```bash
+# Install Rust embedded target for Cortex-M0+
+rustup target add thumbv6m-none-eabi
+
+# Install UF2 conversion tool
+cargo install elf2uf2-rs --locked
+```
+
+### Step 2: Build the Firmware
+```bash
+git clone https://github.com/MortalErlik/pico-os.git
+cd pico-os
 cargo build --release
 elf2uf2-rs target/thumbv6m-none-eabi/release/pico_os pico_os.uf2
 ```
 
-### Flash to Raspberry Pi Pico
-1. Hold down the **BOOTSEL** button on the Raspberry Pi Pico while connecting USB.
-2. Mounts as `RPI-RP2` drive.
-3. Copy `pico_os.uf2`:
+### Step 3: Flash to Raspberry Pi Pico (Drag & Drop)
+1. **Hold down the white BOOTSEL button** on your Raspberry Pi Pico while plugging the Micro-USB cable into your computer.
+2. The Pico will mount as a mass-storage drive named **`RPI-RP2`**.
+3. Copy the `pico_os.uf2` file into the `RPI-RP2` drive:
    ```bash
+   # Linux:
    cp pico_os.uf2 /run/media/$USER/RPI-RP2/
+   # macOS:
+   cp pico_os.uf2 /Volumes/RPI-RP2/
+   # Windows:
+   # Simply drag & drop pico_os.uf2 into the RPI-RP2 USB drive in File Explorer!
    ```
-4. Pico reboots immediately into Pico-OS!
+4. The Raspberry Pi Pico will automatically unmount, reboot, and boot straight into **Pico-OS**!
 
 ---
 
-## 💻 Connecting via Serial Terminal
+## 💻 Connecting to the Interactive Shell
 
-Connect via any serial terminal at **115200 baud**:
+Pico-OS exposes a full VT100/ANSI interactive Unix terminal over both **USB CDC-ACM (Micro-USB port)** and **Hardware UART0 (GP0/GP1)** at **115200 Baud (8N1)**.
+
+### 🐧 Linux (Recommended)
+Add your user to the dialout group if needed (`sudo usermod -aG dialout,uucp $USER`):
 ```bash
+# Using picocom (recommended):
 picocom -b 115200 /dev/ttyACM0
-# or
+
+# Or using minicom:
+minicom -b 115200 -D /dev/ttyACM0
+
+# Or using screen:
 screen /dev/ttyACM0 115200
 ```
+*(To exit picocom: press `Ctrl+A` then `Ctrl+X`. To exit screen: press `Ctrl+A` then `k`).*
+
+### 🍏 macOS
+```bash
+screen /dev/tty.usbmodem* 115200
+```
+
+### 🪟 Windows
+1. Open **Device Manager** to find your Pico's COM port (e.g. `COM3` or `COM4`).
+2. Open **PuTTY**:
+   - Connection type: **Serial**
+   - Serial line: `COM3` (replace with your port)
+   - Speed: `115200`
+   - Click **Open**.
+3. Or use **Tera Term** / **Arduino IDE Serial Monitor** (Set baud rate to `115200` and line ending to `Both NL & CR`).
+
+---
+
+## 🎮 First Things to Try in Pico-OS!
+
+Once connected, press `Enter` to see the prompt:
 
 ```text
   ____  _            ____   ____  
@@ -270,8 +310,17 @@ screen /dev/ttyACM0 115200
  Apps & Tools: fetch | tmux | htop | calc | nano | service list
  Type 'help' for command reference or 'tmux help' for split-screen guide.
 
-root@pico:/# fetch
+root@pico:/# 
 ```
+
+Try running these commands right away:
+1. **`fetch`**: Display the system hardware specs and ASCII Kitty logo!
+2. **`htop`**: Launch the live dual-core monitor (`q` to exit, `k` to kill tasks).
+3. **`tmux`**: Open the 4-pane terminal multiplexer (`split-v`, `split-h`, `focus 1..4`, `Ctrl+B d` to detach).
+4. **`calc 50x4 + sqrt(144)`**: Evaluate math expressions directly.
+5. **`nano test.txt`**: Create and edit files (`Ctrl+O` save, `Ctrl+X` exit).
+6. **`service list`**: Inspect background daemons across CPU0 and CPU1.
+7. **`help`**: View the full 4-category command manual.
 
 ---
 
