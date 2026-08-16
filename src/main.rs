@@ -6,6 +6,7 @@
 
 extern crate alloc;
 
+pub mod calc;
 pub mod drivers;
 pub mod editor;
 pub mod fs;

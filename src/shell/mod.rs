@@ -15,6 +15,7 @@ pub enum ShellMode {
     LineInput,
     Nano(NanoEditor),
     Htop(HtopMonitor),
+    Calc(crate::calc::CalcContext),
 }
 
 pub struct Shell {
@@ -80,7 +81,7 @@ impl Shell {
                     htop.handle_key(byte, &mut write_out);
                     return;
                 }
-                ShellMode::LineInput => {
+                ShellMode::LineInput | ShellMode::Calc(_) => {
                     return;
                 }
             }
@@ -108,6 +109,83 @@ impl Shell {
                     self.print_prompt(&mut write_out);
                 }
             }
+            ShellMode::Calc(ref mut calc_ctx) => {
+                match byte {
+                    // Enter (\r or \n)
+                    b'\r' | b'\n' => {
+                        write_out("\r\n");
+                        let expr = self.input_buffer.trim().to_string();
+                        self.input_buffer.clear();
+
+                        if !expr.is_empty() {
+                            match calc_ctx.eval(&expr) {
+                                Ok(crate::calc::CalcOutput::Exit) => {
+                                    self.mode = ShellMode::LineInput;
+                                    self.print_prompt(&mut write_out);
+                                    return;
+                                }
+                                Ok(crate::calc::CalcOutput::Help) => {
+                                    write_out("\x1b[1;36mPico OS Calculator Functions & Syntax:\x1b[0m\r\n");
+                                    write_out("  Operators : + - * / % ^ ( )\r\n");
+                                    write_out("  Functions : sqrt(x), abs(x), pow(a,b), min(a,b), max(a,b), round(x), floor(x), ceil(x)\r\n");
+                                    write_out("  Variables : x = 42, y = x * 2, ans (last result), pi, e\r\n");
+                                    write_out("  Commands  : 'vars' (list variables), 'help', 'exit' or 'quit'\r\n");
+                                }
+                                Ok(crate::calc::CalcOutput::VarList(vars)) => {
+                                    write_out("\x1b[1;36mVariables:\x1b[0m\r\n");
+                                    for v in vars {
+                                        write_out("  ");
+                                        write_out(&v);
+                                        write_out("\r\n");
+                                    }
+                                }
+                                Ok(crate::calc::CalcOutput::Value(val)) => {
+                                    let s = format!("= \x1b[1;32m{}\x1b[0m\r\n", crate::calc::format_num(val));
+                                    write_out(&s);
+                                }
+                                Ok(crate::calc::CalcOutput::Assignment(name, val)) => {
+                                    let s = format!("{} = \x1b[1;32m{}\x1b[0m\r\n", name, crate::calc::format_num(val));
+                                    write_out(&s);
+                                }
+                                Ok(crate::calc::CalcOutput::Empty) => {}
+                                Err(e) => {
+                                    let s = format!("\x1b[31mError: {}\x1b[0m\r\n", e);
+                                    write_out(&s);
+                                }
+                            }
+                        }
+                        write_out("\x1b[1;33mcalc>\x1b[0m ");
+                    }
+                    // Backspace (0x08 or 0x7F)
+                    0x08 | 0x7F => {
+                        if !self.input_buffer.is_empty() {
+                            self.input_buffer.pop();
+                            write_out("\x08 \x08");
+                        }
+                    }
+                    // Ctrl+C
+                    0x03 => {
+                        self.input_buffer.clear();
+                        self.mode = ShellMode::LineInput;
+                        write_out("^C\r\n");
+                        self.print_prompt(write_out);
+                    }
+                    // Ctrl+L
+                    0x0C => {
+                        write_out("\x1b[2J\x1b[H\x1b[1;33mcalc>\x1b[0m ");
+                        write_out(&self.input_buffer);
+                    }
+                    // Printable ASCII characters
+                    32..=126 => {
+                        let ch = byte as char;
+                        self.input_buffer.push(ch);
+                        let mut b = [0u8; 4];
+                        let s = ch.encode_utf8(&mut b);
+                        write_out(s);
+                    }
+                    _ => {}
+                }
+            }
             ShellMode::LineInput => {
                 match byte {
                     // Enter (\r or \n)
@@ -131,6 +209,13 @@ impl Shell {
                                 let htop = HtopMonitor::new();
                                 htop.render(&mut write_out);
                                 self.mode = ShellMode::Htop(htop);
+                                return;
+                            } else if cmd_line == "calc" || cmd_line == "bc" {
+                                write_out("\x1b[1;36m=== Pico OS Math Calculator REPL ===\x1b[0m\r\n");
+                                write_out("\x1b[0;90mOperators: +, -, *, /, %, ^ | Funcs: sqrt, abs, pow, min, max, round, pi, e, ans\x1b[0m\r\n");
+                                write_out("\x1b[0;33mType expressions (e.g. x = 10, sqrt(x) * 2), 'vars', or 'exit' to leave.\x1b[0m\r\n\r\n");
+                                write_out("\x1b[1;33mcalc>\x1b[0m ");
+                                self.mode = ShellMode::Calc(crate::calc::CalcContext::new());
                                 return;
                             }
 

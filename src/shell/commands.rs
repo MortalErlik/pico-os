@@ -62,6 +62,7 @@ pub fn execute_command(line: &str, ctx: &mut CommandContext) {
         "sync" => cmd_sync(args, ctx),
         "format" => cmd_format(args, ctx),
         "events" => cmd_events(args, ctx),
+        "calc" | "bc" => cmd_calc(args, ctx),
         "disk_write" => cmd_disk_write(args, ctx),
         "disk_read" => cmd_disk_read(args, ctx),
         "uptime" => cmd_uptime(args, ctx),
@@ -131,6 +132,7 @@ fn cmd_help(_args: &[&str], ctx: &mut CommandContext) {
     ctx.println("  \x1b[1;35mi2c_scan\x1b[0m            - Scan I2C bus for OLED and devices");
     ctx.println("  \x1b[1;34mhtop\x1b[0m                - Interactive live Dual-Core process monitor");
     ctx.println("  \x1b[1;34mnano <file>\x1b[0m         - Interactive full-screen terminal text editor");
+    ctx.println("  \x1b[1;34mcalc [expr]\x1b[0m         - Math calculator (interactive REPL or one-shot expression)");
 }
 
 fn cmd_ls(args: &[&str], ctx: &mut CommandContext) {
@@ -579,5 +581,38 @@ fn cmd_events(_args: &[&str], ctx: &mut CommandContext) {
             mins, s, ms, action_col, action_str, ev.path
         );
         ctx.println(&row);
+    }
+}
+
+fn cmd_calc(args: &[&str], ctx: &mut CommandContext) {
+    if args.is_empty() {
+        ctx.println("Usage: calc <expression> or type 'calc' alone to enter interactive mode.");
+        ctx.println("Example: calc 15 * (4 + 2) ^ 2");
+        return;
+    }
+    let expr = args.join(" ");
+    let mut calc_ctx = crate::calc::CalcContext::new();
+    match calc_ctx.eval(&expr) {
+        Ok(crate::calc::CalcOutput::Value(v)) => {
+            let s = format!("= \x1b[1;32m{}\x1b[0m", crate::calc::format_num(v));
+            ctx.println(&s);
+        }
+        Ok(crate::calc::CalcOutput::Assignment(name, v)) => {
+            let s = format!("{} = \x1b[1;32m{}\x1b[0m", name, crate::calc::format_num(v));
+            ctx.println(&s);
+        }
+        Ok(crate::calc::CalcOutput::VarList(vars)) => {
+            for v in vars {
+                ctx.println(&v);
+            }
+        }
+        Ok(crate::calc::CalcOutput::Help) => {
+            ctx.println("Pico OS Calculator: +, -, *, /, %, ^, sqrt(x), abs(x), pow(a,b), min(a,b), max(a,b), round(x), pi, e, ans");
+        }
+        Ok(crate::calc::CalcOutput::Empty | crate::calc::CalcOutput::Exit) => {}
+        Err(e) => {
+            let msg = format!("\x1b[31mCalc error: {}\x1b[0m", e);
+            ctx.println(&msg);
+        }
     }
 }
