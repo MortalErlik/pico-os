@@ -7,7 +7,69 @@
 
 **Pico-OS** is a lightweight, bare-metal Unix-like operating system designed and implemented from scratch in **Rust and ARM Assembly** for the **Raspberry Pi Pico (RP2040 Dual-Core Cortex-M0+)**. 
 
-It features True Symmetric Multiprocessing (SMP), dynamic load balancing across CPU0/CPU1, a custom heap allocator with 95% OOM-Killer protection, an in-memory Virtual File System (VFS) with delayed physical flash committing, and interactive TUI applications (`tmux`, `htop`, `nano`, `calc`, `fetch`).
+It features True Symmetric Multiprocessing (SMP), dynamic load balancing across CPU0/CPU1, a custom heap allocator with 95% OOM-Killer protection, an in-memory Virtual File System (VFS) with delayed physical flash committing, and full-featured interactive TUI applications (`tmux`, `htop`, `nano`, `calc`, `fetch`).
+
+---
+
+## 📸 Interactive Terminal Showcase
+
+### 🐱 1. `fetch` / `neofetch` (Hardware Specs & Cute ASCII Kitty)
+```text
+root@pico:/# fetch
+   /\_/\        root@pico
+  ( o.o )       -----------------------------------
+   > ^ <        OS:      Pico-OS Dual-Core SMP (v0.1.0)
+  /  ~  \       Host:    Raspberry Pi Pico (RP2040 Cortex-M0+)
+ /|     |\      Kernel:  6.1.0-picos-smp (125 MHz Dual-Core)
+(_|     |_)     Uptime:  00:04:12
+  (_____)       Tasks:   5 total (CPU0: 3, CPU1: 2)
+                Memory:  6K / 192K (Swap: 0K / 128K)
+                Storage: VFS 256K | Raw Disk 1.4MB | Swap 128K
+                Shell:   picos-sh v1.0
+                Guard:   95% RAM OOM-Protection Active
+
+                 ███ ███ ███ ███ ███ ███ ███ ███
+                 ███ ███ ███ ███ ███ ███ ███ ███
+```
+
+### 📊 2. `htop` (Dual-Core SMP Process & Storage Monitor)
+```text
+0[||||||||||||||||||||  48%]   Tasks: 4 total, 2 running
+1[||||||||||||          24%]   Uptime: 00:12:45
+Mem[||||||              6K/192K]   Arch: Dual-Core SMP (RP2040)
+VFS [|                   1K/256K]   Disk: VFS Snapshot
+Swap[                    0K/128K]   Disk: Application Paging
+Raw [                    0M/1.4M]   Disk: True Block Device
+
+ PID CORE USER  STATE  CPU%  STACK  NAME
+   1 CPU0 root  RUN     28%    16B  kernel_core0
+   2 CPU1 root  RUN     24%    36B  rt_worker_core1
+   3 CPU0 root  READY    0%    12B  vfs_daemon
+   4 CPU0 root  RUN     20%    12B  worker_task
+
+ F1 Help  F9/K Kill Process  F10/Q Quit Htop
+```
+
+### 🖥️ 3. `tmux` (4-Pane Split-Screen Terminal Multiplexer)
+```text
+┌── [* P1] ─────────────────────────┐┌── [  P2] ─────────────────────────┐
+│ $ fetch                           ││ $ calc                            │
+│    /\_/\       OS: Pico-OS SMP    ││ calc> sqrt(144) * pi              │
+│   ( o.o )      Uptime: 00:12:45   ││ = 37.69911                        │
+│    > ^ <       Memory: 6K / 192K  ││ calc> ans + 10                    │
+│                                   ││ = 47.69911                        │
+│ >                                 ││ >                                 │
+└───────────────────────────────────┘└─── ───────────────────────────────┘
+┌── [  P3] ─────────────────────────┐┌── [  P4] ─────────────────────────┐
+│ $ service list                    ││ $ df -h                           │
+│   ● kernel_core0    [RUNNING]     ││ Filesystem  Size  Used  Avail  %  │
+│   ● rt_worker_core1 [RUNNING]     ││ / (tmpfs)   256K    1K   255K  1% │
+│   ● vfs_daemon      [READY]       ││ /data (fls) 1.0M    4K  1020K  1% │
+│                                   ││                                   │
+│ >                                 ││ >                                 │
+└───────────────────────────────────┘└─── ───────────────────────────────┘
+[pico-tmux] Panes: 4/4 (Active: Pane 1) |  "RP2040 SMP" 12:45
+```
 
 ---
 
