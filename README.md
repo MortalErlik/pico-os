@@ -7,7 +7,7 @@
 
 **Pico-OS** is a lightweight, bare-metal Unix-like operating system designed and implemented from scratch in **Rust and ARM Assembly** for the **Raspberry Pi Pico (RP2040 Dual-Core Cortex-M0+)**. 
 
-It features True Symmetric Multiprocessing (SMP), dynamic load balancing across CPU0/CPU1, a custom heap allocator with 95% OOM-Killer protection, an in-memory Virtual File System (VFS) with delayed physical flash committing, and full-featured interactive TUI applications (`tmux`, `htop`, `nano`, `calc`, `fetch`).
+It features True Symmetric Multiprocessing (SMP), dynamic load balancing across CPU0/CPU1, a custom heap allocator with 95% OOM-Killer protection, a dual-mount Virtual File System (VFS) with delayed physical flash committing, and full-featured interactive TUI applications (`tmux`, `htop`, `nano`, `calc`, `fetch`).
 
 ---
 
@@ -73,6 +73,58 @@ Raw [                    0M/1.4M]   Disk: True Block Device
 
 ---
 
+## 💾 Deep Dive: Storage Architecture & Flash Engine
+
+Pico-OS implements a multi-tier embedded storage architecture designed for speed, data safety, and physical NOR flash longevity:
+
+```text
+┌─────────────────────────────────────────────────────────────────────────┐
+│                           PICO-OS STORAGE STACK                         │
+├─────────────────────────────────────────────────────────────────────────┤
+│  User Space / CLI:   ls, cat, touch, echo >, nano, df -h, sync, events  │
+├─────────────────────────────────────────────────────────────────────────┤
+│  Virtual File System (VFS): Hierarchical Inode Tree & Directory Table   │
+├───────────────────────────────────┬─────────────────────────────────────┤
+│      / (Root tmpfs, 256 KB)       │     /data (Persistent Flash, 1.0MB) │
+│  - Instant In-Memory Operations   │  - Sector 0x100000..0x200000 (NOR)  │
+│  - Zero Flash Wear for temp files │  - Survives power loss & reboot     │
+├───────────────────────────────────┴─────────────────────────────────────┤
+│  Auto-Sync Journal & Wear-Leveling Daemon (vfs_daemon):                 │
+│  - Tracks dirty inodes & file modification timestamps                   │
+│  - 2.5-Second Idle Grace Period: coalesces burst writes                 │
+│  - Atomic Magic Header Snapshot Commit (`PICO_VFS_SNAPSHOT_V1`)         │
+├─────────────────────────────────────────────────────────────────────────┤
+│  Physical Media & Swap Layer:                                           │
+│  - 1.4 MB Raw Block Device Space                                        │
+│  - 128 KB Paging Swap Space (32 x 4KB pages bitmap)                     │
+│  - Flash XIP & Core 1 SMP Bus Arbitration Safety (`CORE1_SPAWNED`)      │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### 1. Dual-Partition Virtual File System
+* **`/` (Root tmpfs Partition - 256 KB)**: Fast, non-blocking RAM directory structure (`/bin`, `/etc`, `/dev`, `/proc`, `/home`). Ideal for volatile files and fast CLI pipes.
+* **`/data` (Persistent Physical Flash Partition - 1.0 MB)**: Located at offset `0x100000` (last 1MB of onboard 2MB SPI NOR Flash). All files written to `/data` are persistent across power cuts and reboots.
+
+### 2. Smart Auto-Commit & Wear-Leveling Journal
+* Microcontroller NOR Flash has a finite number of write/erase cycles (typically ~100,000 per 4KB sector). Writing directly to flash on every keystroke or command output would degrade flash memory rapidly.
+* **Delayed Auto-Sync**: When a file is created or updated:
+  1. The file change is marked **dirty** in RAM immediately.
+  2. An event is published to the `events` inotify journal.
+  3. The `vfs_daemon` task arms a **2.5-second timer**.
+  4. If additional writes occur within 2.5s, the timer resets (write coalescing).
+  5. Once the system is idle for 2.5s, `vfs_daemon` automatically flushes the snapshot to physical flash with a single atomic transaction.
+* **Manual Immediate Sync**: Users can run `sync` at any time to bypass the timer and force an immediate flash commit.
+
+### 3. Application Swap Paging Area
+* A dedicated **128 KB Swap Partition** (divided into 32x 4KB pages) is managed via an atomic bitmask (`SWAP_BITMAP`).
+* Memory usage and swap consumption can be monitored in real-time using `free` and the `Swap[` meter in `htop`.
+
+### 4. SMP-Safe Physical Flash Bus Arbitration
+* On the RP2040, the physical SPI NOR Flash is accessed via the XIP (Execute-In-Place) bus. Writing to or erasing flash sectors requires entering raw serial mode, which can cause CPU hangs if another core attempts to fetch code.
+* Pico-OS coordinates flash writes between Core 0 and Core 1 using `critical_section` locks and `CORE1_SPAWNED` atomic barriers to guarantee 100% bus collision-free operations.
+
+---
+
 ## 🌟 Key Features
 
 ### ⚡ 1. Dual-Core SMP Architecture & Task Scheduling
@@ -86,14 +138,7 @@ Raw [                    0M/1.4M]   Disk: True Block Device
 * **95% RAM OOM-Killer**: Automatically detects critical memory pressure (>95%) and terminates non-essential user tasks (PID > 3) while protecting kernel daemons.
 * **128 KB Swap Partition Tracker**: Live bitmap page tracker exposed through `free` and `htop`.
 
-### 💾 3. Dual-Mount Filesystem & Auto-Sync Journal
-* **Dual Partition Architecture**:
-  * `/` : Fast in-memory root filesystem (`tmpfs`).
-  * `/data` : 1.0 MB Persistent Physical Flash partition.
-* **Auto-Sync Journal**: Delayed auto-commit daemon syncs modified files to physical flash after 2.5s idle to minimize flash write wear.
-* **File Operations**: `ls`, `cd`, `pwd`, `mkdir`, `rm -r`, `touch`, `cat`, `cp`, `mv`, `echo` (with `>` and `>>` redirection), `df -h`, `sync`, `events`, `format`.
-
-### 🖥️ 4. Interactive Terminal Applications (TUI)
+### 🖥️ 3. Interactive Terminal Applications (TUI)
 * **`tmux` 4-Pane Split-Screen Multiplexer**:
   * 1 to 4 split panes (Single, Horizontal, Vertical, Triple, and 2x2 Grid).
   * Built-in split commands: `split-v` / `split right`, `split-h` / `split down`, `focus 1..4`.
@@ -110,11 +155,11 @@ Raw [                    0M/1.4M]   Disk: True Block Device
 * **`fetch` (or `neofetch`)**:
   * System hardware specifications, uptime, tasks, memory/swap, cute colored ASCII Kitty logo, and 16-color ANSI test palette.
 
-### ⚙️ 5. Linux Service Manager (`service` / `systemctl`)
+### ⚙️ 4. Linux Service Manager (`service` / `systemctl`)
 * **Singleton Daemon Protection**: Prevents duplicate task instances unless forced with `-f`.
 * **Service Control**: `service <name> <start|stop|restart|status>` and `service list`.
 
-### 🔌 6. Hardware & Peripheral Control
+### 🔌 5. Hardware & Peripheral Control
 * **Dual Terminal I/O**: Interactive shell is active over USB CDC-ACM Serial and Hardware UART0.
 * **GPIO & Bus Control**: `pin` command for GPIO read/set/clear/toggle and `i2c_scan` for bus probing.
 * **ESP-01 Power & Pin Configuration**: Hardware setup for `GP2 RST`, `GP3 IO0`, and `GP6 CH_PD`.
