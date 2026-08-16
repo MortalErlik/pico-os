@@ -73,9 +73,37 @@ Raw [                    0M/1.4M]   Disk: True Block Device
 
 ---
 
-## 💾 Deep Dive: Storage Architecture & Flash Engine
+## 💾 Deep Dive: 2.0 MB Physical Flash Memory Map & Storage Engine
 
-Pico-OS implements a multi-tier embedded storage architecture designed for speed, data safety, and physical NOR flash longevity:
+Pico-OS implements a complete multi-tier embedded storage architecture that organizes the Raspberry Pi Pico's **2.0 MB (2048 KB) W25Q080 SPI NOR Flash** with byte-precise partitioning:
+
+```text
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                 2.0 MB (2048 KB) PHYSICAL FLASH MEMORY MAP                  │
+├──────────────┬──────────────┬──────────┬────────────────────────────────────┤
+│ Memory Range │ Flash Offset │   Size   │ Description & Purpose              │
+├──────────────┼──────────────┼──────────┼────────────────────────────────────┤
+│ 0x1000_0000  │ 0x000000     │ 256 B    │ rp2040-boot2 (Quad-SPI Bootloader) │
+│ 0x1000_0100  │ 0x000100     │ ~70 KB   │ Pico-OS Kernel Binary & RoData     │
+│ 0x1001_2000  │ 0x012000     │ 440 KB   │ Reserved Kernel Growth Space       │
+│ 0x1008_0000  │ 0x080000     │ 128 KB   │ Virtual Memory Swap Paging Space   │
+│ 0x100A_0000  │ 0x0A0000     │ 384 KB   │ Raw Block Device & Inotify Logs    │
+│ 0x1010_0000  │ 0x100000     │ 1024 KB  │ /data Persistent Partition (1.0MB) │
+└──────────────┴──────────────┴──────────┴────────────────────────────────────┘
+```
+
+> ### 💡 Why is the compiled binary/UF2 only ~70 KB? Where does the rest of the 2 MB go?
+> Pico-OS is written in zero-overhead, bare-metal `no_std` Rust and handcrafted ARM Assembly. The entire operating system kernel (multiprocessing scheduler, custom heap allocator, TUI applications, calculator, VFS, and drivers) compiles to just **~70 KB of ultra-optimized native machine code**.
+> 
+> Instead of leaving the remaining **1.93 MB** of high-speed onboard SPI NOR flash empty, Pico-OS partitions and utilizes the physical chip completely:
+> 1. **1024 KB (1.0 MB)** is dedicated to the persistent physical file system (`/data`).
+> 2. **128 KB** is dedicated to application virtual memory swap paging.
+> 3. **384 KB** is dedicated to raw block storage and journaled inotify logs.
+> 4. **Zero Bloat, 100% Efficiency!**
+
+---
+
+### Storage Stack Architecture
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -101,12 +129,12 @@ Pico-OS implements a multi-tier embedded storage architecture designed for speed
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 1. Dual-Partition Virtual File System
-* **`/` (Root tmpfs Partition - 256 KB)**: Fast, non-blocking RAM directory structure (`/bin`, `/etc`, `/dev`, `/proc`, `/home`). Ideal for volatile files and fast CLI pipes.
-* **`/data` (Persistent Physical Flash Partition - 1.0 MB)**: Located at offset `0x100000` (last 1MB of onboard 2MB SPI NOR Flash). All files written to `/data` are persistent across power cuts and reboots.
+#### 1. Dual-Partition Virtual File System
+* **`/` (Root tmpfs Partition - 256 KB)**: Fast, non-blocking RAM directory structure (`/bin`, `/etc`, `/dev`, `/proc`, `/home`). Ideal for volatile files and fast CLI pipes without wearing flash memory.
+* **`/data` (Persistent Physical Flash Partition - 1.0 MB)**: Located at offset `0x100000` (last 1MB of onboard 2MB SPI NOR Flash). All files written to `/data` survive power loss and reboots.
 
-### 2. Smart Auto-Commit & Wear-Leveling Journal
-* Microcontroller NOR Flash has a finite number of write/erase cycles (typically ~100,000 per 4KB sector). Writing directly to flash on every keystroke or command output would degrade flash memory rapidly.
+#### 2. Smart Auto-Commit & Wear-Leveling Journal
+* Microcontroller NOR Flash has a finite number of write/erase cycles (typically ~100,000 per 4KB sector). Writing directly to flash on every keystroke would degrade flash memory rapidly.
 * **Delayed Auto-Sync**: When a file is created or updated:
   1. The file change is marked **dirty** in RAM immediately.
   2. An event is published to the `events` inotify journal.
@@ -115,11 +143,11 @@ Pico-OS implements a multi-tier embedded storage architecture designed for speed
   5. Once the system is idle for 2.5s, `vfs_daemon` automatically flushes the snapshot to physical flash with a single atomic transaction.
 * **Manual Immediate Sync**: Users can run `sync` at any time to bypass the timer and force an immediate flash commit.
 
-### 3. Application Swap Paging Area
+#### 3. Application Swap Paging Area
 * A dedicated **128 KB Swap Partition** (divided into 32x 4KB pages) is managed via an atomic bitmask (`SWAP_BITMAP`).
 * Memory usage and swap consumption can be monitored in real-time using `free` and the `Swap[` meter in `htop`.
 
-### 4. SMP-Safe Physical Flash Bus Arbitration
+#### 4. SMP-Safe Physical Flash Bus Arbitration
 * On the RP2040, the physical SPI NOR Flash is accessed via the XIP (Execute-In-Place) bus. Writing to or erasing flash sectors requires entering raw serial mode, which can cause CPU hangs if another core attempts to fetch code.
 * Pico-OS coordinates flash writes between Core 0 and Core 1 using `critical_section` locks and `CORE1_SPAWNED` atomic barriers to guarantee 100% bus collision-free operations.
 
