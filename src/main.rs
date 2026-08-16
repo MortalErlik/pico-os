@@ -14,6 +14,7 @@ pub mod htop;
 pub mod mm;
 pub mod shell;
 pub mod task;
+pub mod tmux;
 
 use cortex_m_rt::entry;
 use embedded_hal::digital::v2::OutputPin;

@@ -64,6 +64,8 @@ pub fn execute_command(line: &str, ctx: &mut CommandContext) {
         "events" => cmd_events(args, ctx),
         "calc" | "bc" => cmd_calc(args, ctx),
         "service" | "systemctl" => cmd_service(args, ctx),
+        "neofetch" | "fetch" => cmd_fetch(args, ctx),
+        "tmux" => {} // Handled at top-level shell loop
         "disk_write" => cmd_disk_write(args, ctx),
         "disk_read" => cmd_disk_read(args, ctx),
         "uptime" => cmd_uptime(args, ctx),
@@ -135,6 +137,8 @@ fn cmd_help(_args: &[&str], ctx: &mut CommandContext) {
     ctx.println("  \x1b[1;34mhtop\x1b[0m                - Interactive live Dual-Core process monitor");
     ctx.println("  \x1b[1;34mnano <file>\x1b[0m         - Interactive full-screen terminal text editor");
     ctx.println("  \x1b[1;34mcalc [expr]\x1b[0m         - Math calculator (interactive REPL or one-shot expression)");
+    ctx.println("  \x1b[1;34mtmux\x1b[0m                - Terminal multiplexer with multi-window virtual tabs");
+    ctx.println("  \x1b[1;35mneofetch\x1b[0m (or fetch) - Display system hardware specs, logo & ANSI palette");
 }
 
 fn cmd_ls(args: &[&str], ctx: &mut CommandContext) {
@@ -733,4 +737,8 @@ fn cmd_calc(args: &[&str], ctx: &mut CommandContext) {
             ctx.println(&msg);
         }
     }
+}
+
+fn cmd_fetch(_args: &[&str], ctx: &mut CommandContext) {
+    crate::shell::fetch::render_fetch(|s| (ctx.output)(s));
 }

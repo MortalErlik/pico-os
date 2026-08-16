@@ -1,6 +1,7 @@
 //! Interactive Unix-like Shell for Pico OS
 
 pub mod commands;
+pub mod fetch;
 
 extern crate alloc;
 use alloc::format;
@@ -9,6 +10,7 @@ use alloc::vec::Vec;
 use crate::editor::NanoEditor;
 use crate::fs;
 use crate::htop::HtopMonitor;
+use crate::tmux::TmuxManager;
 use commands::{execute_command, CommandContext};
 
 pub enum ShellMode {
@@ -16,6 +18,7 @@ pub enum ShellMode {
     Nano(NanoEditor),
     Htop(HtopMonitor),
     Calc(crate::calc::CalcContext),
+    Tmux(TmuxManager),
 }
 
 pub struct Shell {
@@ -81,7 +84,7 @@ impl Shell {
                     htop.handle_key(byte, &mut write_out);
                     return;
                 }
-                ShellMode::LineInput | ShellMode::Calc(_) => {
+                ShellMode::LineInput | ShellMode::Calc(_) | ShellMode::Tmux(_) => {
                     return;
                 }
             }
@@ -104,6 +107,14 @@ impl Shell {
             ShellMode::Htop(ref mut htop) => {
                 htop.handle_key(byte, &mut write_out);
                 if htop.should_exit {
+                    self.mode = ShellMode::LineInput;
+                    write_out("\x1b[?25h\x1b[2J\x1b[H");
+                    self.print_prompt(&mut write_out);
+                }
+            }
+            ShellMode::Tmux(ref mut tmux) => {
+                tmux.handle_key(byte, &mut write_out);
+                if tmux.should_exit {
                     self.mode = ShellMode::LineInput;
                     write_out("\x1b[?25h\x1b[2J\x1b[H");
                     self.print_prompt(&mut write_out);
@@ -216,6 +227,11 @@ impl Shell {
                                 write_out("\x1b[0;33mType expressions (e.g. x = 10, sqrt(x) * 2), 'vars', or 'exit' to leave.\x1b[0m\r\n\r\n");
                                 write_out("\x1b[1;33mcalc>\x1b[0m ");
                                 self.mode = ShellMode::Calc(crate::calc::CalcContext::new());
+                                return;
+                            } else if cmd_line == "tmux" {
+                                let mut tmux = TmuxManager::new();
+                                tmux.render(&mut write_out);
+                                self.mode = ShellMode::Tmux(tmux);
                                 return;
                             }
 
