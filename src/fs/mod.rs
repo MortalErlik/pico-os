@@ -128,7 +128,7 @@ pub fn format_fs() -> Result<(), FsError> {
 
 /// Get filesystem usage: (flash_used_bytes, flash_total_bytes)
 pub fn get_fs_usage() -> (usize, usize) {
-    let total_flash_bytes = 1024 * 1024; // 1.0 MB Flash Partition
+    let total_flash_bytes = 256 * 1024; // 256 KB VFS Snapshot Partition
     let used_bytes = with_fs(|fs| {
         if let Ok(node) = fs.find_node("/") {
             node.total_recursive_size()
