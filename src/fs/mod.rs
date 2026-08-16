@@ -249,7 +249,7 @@ impl FileSystem {
 
     /// Restore `/data` partition from Flash at boot (Zero-allocation direct XIP slice read)
     pub fn load_from_flash(&mut self) {
-        let flash_ptr = (0x10000000 + flash::FLASH_PERSIST_OFFSET) as *const u8;
+        let flash_ptr = (0x10000000 + flash::FLASH_VFS_OFFSET) as *const u8;
         let header = unsafe { core::slice::from_raw_parts(flash_ptr, 8) };
 
         let magic = u32::from_le_bytes([header[0], header[1], header[2], header[3]]);

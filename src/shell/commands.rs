@@ -61,6 +61,8 @@ pub fn execute_command(line: &str, ctx: &mut CommandContext) {
         "df" => cmd_df(args, ctx),
         "sync" => cmd_sync(args, ctx),
         "format" => cmd_format(args, ctx),
+        "disk_write" => cmd_disk_write(args, ctx),
+        "disk_read" => cmd_disk_read(args, ctx),
         "uptime" => cmd_uptime(args, ctx),
         "uname" => cmd_uname(args, ctx),
         "whoami" => cmd_whoami(args, ctx),
@@ -482,4 +484,57 @@ fn cmd_i2c_scan(_args: &[&str], ctx: &mut CommandContext) {
     ctx.println("60: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --");
     ctx.println("70: -- -- -- -- -- -- -- --");
     ctx.println("\x1b[32mFound SSD1306 OLED Display at address 0x3C!\x1b[0m");
+}
+
+fn cmd_disk_write(args: &[&str], ctx: &mut CommandContext) {
+    if args.len() < 2 {
+        ctx.println("Usage: disk_write <block_id> <text>");
+        return;
+    }
+    let block_id = match args[0].parse::<u32>() {
+        Ok(id) => id,
+        Err(_) => {
+            ctx.println("Invalid block ID");
+            return;
+        }
+    };
+    let text = args[1..].join(" ");
+    let mut buf = [0u8; 4096];
+    let bytes = text.as_bytes();
+    let len = bytes.len().min(4096);
+    buf[..len].copy_from_slice(&bytes[..len]);
+    
+    fs::flash::write_disk_block(block_id, &buf);
+    let msg = alloc::format!("Wrote {} bytes to True Disk block {}", len, block_id);
+    ctx.println(&msg);
+}
+
+fn cmd_disk_read(args: &[&str], ctx: &mut CommandContext) {
+    if args.len() != 1 {
+        ctx.println("Usage: disk_read <block_id>");
+        return;
+    }
+    let block_id = match args[0].parse::<u32>() {
+        Ok(id) => id,
+        Err(_) => {
+            ctx.println("Invalid block ID");
+            return;
+        }
+    };
+    let mut buf = [0u8; 4096];
+    fs::flash::read_disk_block(block_id, &mut buf);
+    
+    // Find null terminator or end
+    let mut len = 4096;
+    for (i, &b) in buf.iter().enumerate() {
+        if b == 0 {
+            len = i;
+            break;
+        }
+    }
+    
+    match core::str::from_utf8(&buf[..len]) {
+        Ok(s) => ctx.println(s),
+        Err(_) => ctx.println("<binary data>"),
+    }
 }

@@ -5,7 +5,11 @@
 
 use core::sync::atomic::{AtomicBool, Ordering};
 
-pub const FLASH_PERSIST_OFFSET: u32 = 0x100000; // 1.0 MB Flash Offset (Safe from code)
+// Flash Memory Map Offsets
+pub const FLASH_VFS_OFFSET: u32 = 0x40000;    // 256 KB Offset: For VFS Snapshot (256 KB size)
+pub const FLASH_SWAP_OFFSET: u32 = 0x80000;   // 512 KB Offset: For Swap Partition (128 KB size)
+pub const FLASH_DISK_OFFSET: u32 = 0xA0000;   // 640 KB Offset: For True Disk Partition (1.4 MB size)
+
 pub const FLASH_SECTOR_SIZE: usize = 4096;
 pub const FLASH_MAGIC: u32 = 0x5049434F; // "PICO"
 
@@ -102,7 +106,7 @@ unsafe fn ram_program_page(flash_offset: u32, data_ptr: *const u8, fns: &RomFns)
 
 /// Read directly from XIP memory mapped Flash (0x10000000 + offset)
 pub fn read_flash(offset: u32, buf: &mut [u8]) {
-    let xip_ptr = (0x10000000 + FLASH_PERSIST_OFFSET + offset) as *const u8;
+    let xip_ptr = (0x10000000 + FLASH_VFS_OFFSET + offset) as *const u8;
     unsafe {
         core::ptr::copy_nonoverlapping(xip_ptr, buf.as_mut_ptr(), buf.len());
     }
@@ -114,7 +118,7 @@ pub fn write_flash(offset: u32, data: &[u8]) -> bool {
 
     let total_sectors = (data.len() + FLASH_SECTOR_SIZE - 1) / FLASH_SECTOR_SIZE;
     let total_pages = (data.len() + 255) / 256;
-    let base_flash_offset = FLASH_PERSIST_OFFSET + offset;
+    let base_flash_offset = FLASH_VFS_OFFSET + offset;
 
     // Single atomic lockout transaction for the entire flash write operation
     begin_transaction();
@@ -151,8 +155,69 @@ pub fn erase_persist_area() {
     cortex_m::interrupt::free(|_| unsafe {
         // Erase first 8 sectors (32 KB) which holds the snapshot
         for i in 0..8 {
-            let sector_offset = FLASH_PERSIST_OFFSET + (i * FLASH_SECTOR_SIZE) as u32;
+            let sector_offset = FLASH_VFS_OFFSET + (i * FLASH_SECTOR_SIZE) as u32;
             ram_erase_sector(sector_offset, &fns);
+        }
+    });
+    end_transaction();
+}
+
+/// Read a 4096-byte block from the True Disk Partition
+pub fn read_disk_block(block_id: u32, buf: &mut [u8; 4096]) {
+    let offset = block_id * (FLASH_SECTOR_SIZE as u32);
+    let xip_ptr = (0x10000000 + FLASH_DISK_OFFSET + offset) as *const u8;
+    unsafe {
+        core::ptr::copy_nonoverlapping(xip_ptr, buf.as_mut_ptr(), buf.len());
+    }
+}
+
+/// Erase and write a 4096-byte block to the True Disk Partition
+pub fn write_disk_block(block_id: u32, buf: &[u8; 4096]) {
+    let fns = RomFns::load();
+    let offset = block_id * (FLASH_SECTOR_SIZE as u32);
+    let base_flash_offset = FLASH_DISK_OFFSET + offset;
+
+    begin_transaction();
+    cortex_m::interrupt::free(|_| unsafe {
+        // Erase 1 sector (4096 bytes)
+        ram_erase_sector(base_flash_offset, &fns);
+
+        // Program 16 pages (256 bytes * 16 = 4096 bytes)
+        for p in 0..16 {
+            let page_offset = base_flash_offset + (p * 256) as u32;
+            let chunk = &buf[(p as usize * 256)..((p + 1) as usize * 256)];
+            let page_buf_ptr = core::ptr::addr_of_mut!(PAGE_BUF.0);
+            core::ptr::copy_nonoverlapping(chunk.as_ptr(), (*page_buf_ptr).as_mut_ptr(), chunk.len());
+            ram_program_page(page_offset, (*page_buf_ptr).as_ptr(), &fns);
+        }
+    });
+    end_transaction();
+}
+
+/// Read a 4096-byte block from the Swap Partition
+pub fn read_swap_block(block_id: u32, buf: &mut [u8; 4096]) {
+    let offset = block_id * (FLASH_SECTOR_SIZE as u32);
+    let xip_ptr = (0x10000000 + FLASH_SWAP_OFFSET + offset) as *const u8;
+    unsafe {
+        core::ptr::copy_nonoverlapping(xip_ptr, buf.as_mut_ptr(), buf.len());
+    }
+}
+
+/// Erase and write a 4096-byte block to the Swap Partition
+pub fn write_swap_block(block_id: u32, buf: &[u8; 4096]) {
+    let fns = RomFns::load();
+    let offset = block_id * (FLASH_SECTOR_SIZE as u32);
+    let base_flash_offset = FLASH_SWAP_OFFSET + offset;
+
+    begin_transaction();
+    cortex_m::interrupt::free(|_| unsafe {
+        ram_erase_sector(base_flash_offset, &fns);
+        for p in 0..16 {
+            let page_offset = base_flash_offset + (p * 256) as u32;
+            let chunk = &buf[(p as usize * 256)..((p + 1) as usize * 256)];
+            let page_buf_ptr = core::ptr::addr_of_mut!(PAGE_BUF.0);
+            core::ptr::copy_nonoverlapping(chunk.as_ptr(), (*page_buf_ptr).as_mut_ptr(), chunk.len());
+            ram_program_page(page_offset, (*page_buf_ptr).as_ptr(), &fns);
         }
     });
     end_transaction();
