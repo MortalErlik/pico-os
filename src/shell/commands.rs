@@ -61,6 +61,7 @@ pub fn execute_command(line: &str, ctx: &mut CommandContext) {
         "df" => cmd_df(args, ctx),
         "sync" => cmd_sync(args, ctx),
         "format" => cmd_format(args, ctx),
+        "events" => cmd_events(args, ctx),
         "disk_write" => cmd_disk_write(args, ctx),
         "disk_read" => cmd_disk_read(args, ctx),
         "uptime" => cmd_uptime(args, ctx),
@@ -115,6 +116,7 @@ fn cmd_help(_args: &[&str], ctx: &mut CommandContext) {
     ctx.println("  \x1b[1;32mecho [text]\x1b[0m         - Print text (supports > and >> redirection)");
     ctx.println("  \x1b[1;32mdf [-h]\x1b[0m             - Show Dual-Mount filesystems (Root tmpfs & /data Flash)");
     ctx.println("  \x1b[1;32msync\x1b[0m                - Synchronize /data partition to Physical Flash");
+    ctx.println("  \x1b[1;32mevents\x1b[0m              - Show real-time VFS file events & delayed auto-sync journal");
     ctx.println("  \x1b[1;32mformat\x1b[0m              - Format persistent /data partition on 1.0MB Flash");
     ctx.println("  \x1b[1;33mps\x1b[0m                  - List all active tasks across CPU0 & CPU1");
     ctx.println("  \x1b[1;33mkill <pid>\x1b[0m          - Terminate task by PID");
@@ -536,5 +538,46 @@ fn cmd_disk_read(args: &[&str], ctx: &mut CommandContext) {
     match core::str::from_utf8(&buf[..len]) {
         Ok(s) => ctx.println(s),
         Err(_) => ctx.println("<binary data>"),
+    }
+}
+
+fn cmd_events(_args: &[&str], ctx: &mut CommandContext) {
+    let events = fs::get_events();
+    let is_dirty = fs::is_fs_dirty();
+    let status_str = if is_dirty {
+        "\x1b[1;33mDIRTY (Delayed Auto-Sync Pending...)\x1b[0m"
+    } else {
+        "\x1b[1;32mCLEAN (Synchronized with Flash)\x1b[0m"
+    };
+
+    ctx.println("\x1b[1;36m=== VFS Real-time Event Journal (inotify log) ===\x1b[0m");
+    let state_line = format!("VFS Status: {}", status_str);
+    ctx.println(&state_line);
+    ctx.println("-------------------------------------------------");
+
+    if events.is_empty() {
+        ctx.println("  No filesystem events recorded yet.");
+        return;
+    }
+
+    for ev in events {
+        let secs = ev.tick / 1000;
+        let mins = secs / 60;
+        let s = secs % 60;
+        let ms = ev.tick % 1000;
+
+        let (action_col, action_str) = match ev.kind {
+            fs::FsEventKind::Create => ("\x1b[1;32m", "CREATE   "),
+            fs::FsEventKind::Modify => ("\x1b[1;33m", "MODIFY   "),
+            fs::FsEventKind::Delete => ("\x1b[1;31m", "DELETE   "),
+            fs::FsEventKind::AutoSync => ("\x1b[1;35m", "AUTOSYNC "),
+            fs::FsEventKind::ManualSync => ("\x1b[1;36m", "SYNC     "),
+        };
+
+        let row = format!(
+            "  [{:02}:{:02}.{:03}] {}{}\x1b[0m {}",
+            mins, s, ms, action_col, action_str, ev.path
+        );
+        ctx.println(&row);
     }
 }

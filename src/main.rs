@@ -199,6 +199,11 @@ fn main() -> ! {
             shell.tick(|s| write_out!(s));
         }
 
+        // Automatic Delayed Writeback (Kernel Background Auto-Sync)
+        if fs::poll_auto_sync(current_ticks) {
+            did_work = true;
+        }
+
         // Read UART characters (from ESP-01 or external serial)
         let mut uart_buf = [0u8; 1];
         if let Ok(1) = uart.read_raw(&mut uart_buf) {

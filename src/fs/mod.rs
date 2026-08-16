@@ -10,7 +10,87 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::cell::RefCell;
+use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use critical_section::Mutex;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FsEventKind {
+    Create,
+    Modify,
+    Delete,
+    AutoSync,
+    ManualSync,
+}
+
+#[derive(Debug, Clone)]
+pub struct FsEvent {
+    pub tick: u32,
+    pub kind: FsEventKind,
+    pub path: String,
+}
+
+pub static IS_DIRTY: AtomicBool = AtomicBool::new(false);
+pub static LAST_WRITE_TICK: AtomicU32 = AtomicU32::new(0);
+
+static EVENT_LOG: Mutex<RefCell<Vec<FsEvent>>> = Mutex::new(RefCell::new(Vec::new()));
+
+pub fn record_event(kind: FsEventKind, path: &str) {
+    let tick = crate::task::get_uptime_ticks();
+    critical_section::with(|cs| {
+        let mut log = EVENT_LOG.borrow_ref_mut(cs);
+        if log.len() >= 10 {
+            log.remove(0);
+        }
+        log.push(FsEvent {
+            tick,
+            kind,
+            path: path.to_string(),
+        });
+    });
+}
+
+pub fn get_events() -> Vec<FsEvent> {
+    critical_section::with(|cs| {
+        EVENT_LOG.borrow_ref(cs).clone()
+    })
+}
+
+pub fn mark_dirty(kind: FsEventKind, path: &str) {
+    let tick = crate::task::get_uptime_ticks();
+    LAST_WRITE_TICK.store(tick, Ordering::Release);
+    IS_DIRTY.store(true, Ordering::Release);
+    record_event(kind, path);
+}
+
+pub fn is_fs_dirty() -> bool {
+    IS_DIRTY.load(Ordering::Acquire)
+}
+
+/// Polls for delayed auto-sync (called by kernel dispatch loop)
+/// Auto-syncs if dirty and at least 3000ms elapsed since last modification
+pub fn poll_auto_sync(current_tick: u32) -> bool {
+    if !IS_DIRTY.load(Ordering::Acquire) {
+        return false;
+    }
+    let last = LAST_WRITE_TICK.load(Ordering::Acquire);
+    if current_tick.wrapping_sub(last) >= 3000 {
+        sync_fs_internal(true);
+        return true;
+    }
+    false
+}
+
+fn sync_fs_internal(is_auto: bool) {
+    with_fs(|fs| {
+        fs.save_to_flash();
+    });
+    IS_DIRTY.store(false, Ordering::Release);
+    if is_auto {
+        record_event(FsEventKind::AutoSync, "/ (Flash auto-committed)");
+    } else {
+        record_event(FsEventKind::ManualSync, "/ (Flash committed)");
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FsError {
@@ -83,6 +163,7 @@ impl FsNode {
 pub struct FileSystem {
     root: FsNode,
     current_dir: String,
+    pub initialized: bool,
 }
 
 static GLOBAL_FS: Mutex<RefCell<Option<FileSystem>>> = Mutex::new(RefCell::new(None));
@@ -97,7 +178,9 @@ where
         if fs_lock.is_none() {
             let mut fs = FileSystem::new();
             fs.load_from_flash();
+            fs.initialized = true;
             *fs_lock = Some(fs);
+            IS_DIRTY.store(false, Ordering::Release);
         }
         f(fs_lock.as_mut().unwrap())
     })
@@ -123,6 +206,8 @@ pub fn format_fs() -> Result<(), FsError> {
         let _ = fs.write_file("/data/readme.txt", readme);
         fs.save_to_flash();
     });
+    IS_DIRTY.store(false, Ordering::Release);
+    record_event(FsEventKind::ManualSync, "/data formatted");
     Ok(())
 }
 
@@ -141,9 +226,7 @@ pub fn get_fs_usage() -> (usize, usize) {
 
 /// Sync all `/data` persistent files to physical Flash
 pub fn sync_fs() {
-    with_fs(|fs| {
-        fs.save_to_flash();
-    });
+    sync_fs_internal(false);
 }
 
 impl FileSystem {
@@ -151,6 +234,7 @@ impl FileSystem {
         let mut fs = FileSystem {
             root: FsNode::new_dir("/"),
             current_dir: String::from("/"),
+            initialized: false,
         };
         fs.populate_defaults();
         fs
@@ -429,6 +513,9 @@ impl FileSystem {
             }
             _ => return Err(FsError::NotADirectory),
         }
+        if self.initialized {
+            mark_dirty(FsEventKind::Create, &abs);
+        }
         Ok(())
     }
 
@@ -440,6 +527,7 @@ impl FileSystem {
         let (parents, name) = self.split_path(&abs);
         let parent = self.traverse_to_dir_mut(&parents)?;
 
+        let mut is_modify = false;
         match &mut parent.kind {
             NodeKind::Directory { children } => {
                 if let Some(existing) = children.iter_mut().find(|c| c.name == name) {
@@ -447,11 +535,15 @@ impl FileSystem {
                         return Err(FsError::IsADirectory);
                     }
                     existing.kind = NodeKind::File { content };
+                    is_modify = true;
                 } else {
                     children.push(FsNode::new_file(name, content));
                 }
             }
             _ => return Err(FsError::NotADirectory),
+        }
+        if self.initialized {
+            mark_dirty(if is_modify { FsEventKind::Modify } else { FsEventKind::Create }, &abs);
         }
         Ok(())
     }
@@ -565,6 +657,9 @@ impl FileSystem {
                 children.remove(idx);
             }
             _ => return Err(FsError::NotADirectory),
+        }
+        if self.initialized {
+            mark_dirty(FsEventKind::Delete, &abs);
         }
         Ok(())
     }
