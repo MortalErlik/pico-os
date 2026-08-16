@@ -72,10 +72,19 @@ impl Scheduler {
     }
 
     pub fn spawn(&mut self, name: &str, mut core: u8, stack_size: usize, entry: extern "C" fn(usize), arg: usize) -> usize {
-        // Smart SMP Core Selection: if core >= 2, pick the core with lower CPU load
+        // Smart SMP Core Selection: if core >= 2, pick the core with lower CPU load or fewer tasks
         if core >= 2 {
             let (l0, l1) = unsafe { (CPU0_LOAD, CPU1_LOAD) };
-            core = if l1 < l0 { 1 } else { 0 };
+            if l1 < l0 {
+                core = 1;
+            } else if l0 < l1 {
+                core = 0;
+            } else {
+                // If loads are equal, balance by count of active tasks on each core
+                let count0 = self.tasks.iter().filter(|t| t.core == 0 && t.state != TaskState::Dead).count();
+                let count1 = self.tasks.iter().filter(|t| t.core == 1 && t.state != TaskState::Dead).count();
+                core = if count1 < count0 { 1 } else { 0 };
+            }
         }
 
         let pid = self.next_pid;
@@ -120,6 +129,25 @@ impl Scheduler {
             }
         }
         false
+    }
+
+    pub fn kill_by_name(&mut self, name: &str) -> Option<usize> {
+        for task in &mut self.tasks {
+            if task.pid > 3 && task.name == name && task.state != TaskState::Dead {
+                task.state = TaskState::Dead;
+                return Some(task.pid);
+            }
+        }
+        None
+    }
+
+    pub fn find_active_by_name(&self, name: &str) -> Option<usize> {
+        for task in &self.tasks {
+            if task.name == name && task.state != TaskState::Dead {
+                return Some(task.pid);
+            }
+        }
+        None
     }
 
     /// OOM-Killer: safely terminates the latest non-protected user task (PID > 3) to prevent kernel panic
@@ -305,6 +333,26 @@ pub fn kill(pid: usize) -> bool {
             sched.kill(pid)
         } else {
             false
+        }
+    })
+}
+
+pub fn kill_by_name(name: &str) -> Option<usize> {
+    critical_section::with(|_| unsafe {
+        if let Some(ref mut sched) = SCHEDULER {
+            sched.kill_by_name(name)
+        } else {
+            None
+        }
+    })
+}
+
+pub fn find_active_by_name(name: &str) -> Option<usize> {
+    critical_section::with(|_| unsafe {
+        if let Some(ref sched) = SCHEDULER {
+            sched.find_active_by_name(name)
+        } else {
+            None
         }
     })
 }

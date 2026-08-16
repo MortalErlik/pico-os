@@ -63,6 +63,7 @@ pub fn execute_command(line: &str, ctx: &mut CommandContext) {
         "format" => cmd_format(args, ctx),
         "events" => cmd_events(args, ctx),
         "calc" | "bc" => cmd_calc(args, ctx),
+        "service" | "systemctl" => cmd_service(args, ctx),
         "disk_write" => cmd_disk_write(args, ctx),
         "disk_read" => cmd_disk_read(args, ctx),
         "uptime" => cmd_uptime(args, ctx),
@@ -120,9 +121,10 @@ fn cmd_help(_args: &[&str], ctx: &mut CommandContext) {
     ctx.println("  \x1b[1;32mevents\x1b[0m              - Show real-time VFS file events & delayed auto-sync journal");
     ctx.println("  \x1b[1;32mformat\x1b[0m              - Format persistent /data partition on 1.0MB Flash");
     ctx.println("  \x1b[1;33mps\x1b[0m                  - List all active tasks across CPU0 & CPU1");
-    ctx.println("  \x1b[1;33mkill <pid>\x1b[0m          - Terminate task by PID");
-    ctx.println("  \x1b[1;33mspawn <name> [core]\x1b[0m - Launch a background task on CPU0 or CPU1");
-    ctx.println("  \x1b[1;33mfree\x1b[0m                - Display 216KB RAM & heap allocation stats");
+    ctx.println("  \x1b[1;33mkill <pid|name>\x1b[0m     - Terminate task by PID or process name");
+    ctx.println("  \x1b[1;33mspawn [-f] <name>\x1b[0m   - Launch task (auto-balanced, prevents accidental duplicates)");
+    ctx.println("  \x1b[1;33mservice <name> <cmd>\x1b[0m- System service manager (start, stop, restart, status, list)");
+    ctx.println("  \x1b[1;33mfree\x1b[0m                - Display 216KB RAM, Swap & 95% OOM Guard status");
     ctx.println("  \x1b[1;33muptime\x1b[0m              - Display system running time");
     ctx.println("  \x1b[1;33muname [-a]\x1b[0m          - Show kernel & Dual-Core SMP architecture info");
     ctx.println("  \x1b[1;33mwhoami\x1b[0m              - Print current user (root)");
@@ -312,10 +314,11 @@ fn cmd_ps(_args: &[&str], ctx: &mut CommandContext) {
 
 fn cmd_kill(args: &[&str], ctx: &mut CommandContext) {
     if args.is_empty() {
-        ctx.println("\x1b[31mkill: missing PID argument\x1b[0m");
+        ctx.println("\x1b[31mkill: missing PID or process name argument\x1b[0m");
         return;
     }
-    if let Ok(pid) = args[0].parse::<usize>() {
+    let target = args[0];
+    if let Ok(pid) = target.parse::<usize>() {
         if task::kill(pid) {
             let s = format!("\x1b[32mSignal SIGKILL (9) sent to PID {}\x1b[0m", pid);
             ctx.println(&s);
@@ -324,7 +327,14 @@ fn cmd_kill(args: &[&str], ctx: &mut CommandContext) {
             ctx.println(&s);
         }
     } else {
-        ctx.println("\x1b[31mkill: invalid PID\x1b[0m");
+        // Kill by process name
+        if let Some(pid) = task::kill_by_name(target) {
+            let s = format!("\x1b[32mTerminated process '{}' (PID {})\x1b[0m", target, pid);
+            ctx.println(&s);
+        } else {
+            let s = format!("\x1b[31mkill: no active process named '{}' found (or protected)\x1b[0m", target);
+            ctx.println(&s);
+        }
     }
 }
 
@@ -335,16 +345,39 @@ extern "C" fn demo_worker_task(_arg: usize) {
 }
 
 fn cmd_spawn(args: &[&str], ctx: &mut CommandContext) {
-    let name = args.first().copied().unwrap_or("worker_task");
-    let core = if args.len() > 1 {
-        if args[1].eq_ignore_ascii_case("auto") {
+    let mut force = false;
+    let mut clean_args = Vec::new();
+
+    for arg in args {
+        if *arg == "-f" || *arg == "--force" {
+            force = true;
+        } else {
+            clean_args.push(*arg);
+        }
+    }
+
+    let name = clean_args.first().copied().unwrap_or("worker_task");
+    let core = if clean_args.len() > 1 {
+        if clean_args[1].eq_ignore_ascii_case("auto") {
             255
         } else {
-            args[1].parse::<u8>().unwrap_or(255)
+            clean_args[1].parse::<u8>().unwrap_or(255)
         }
     } else {
         255 // Auto SMP load-balance by default
     };
+
+    // Prevent accidental duplicates unless -f is specified
+    if !force {
+        if let Some(existing_pid) = task::find_active_by_name(name) {
+            let s = format!(
+                "\x1b[33m[WARN] Task '{}' is already running (PID {}). Use 'service restart {}' or 'spawn -f {}' to duplicate.\x1b[0m",
+                name, existing_pid, name, name
+            );
+            ctx.println(&s);
+            return;
+        }
+    }
 
     let pid = task::spawn(name, core, 1024, demo_worker_task, 0);
     if core >= 2 {
@@ -353,6 +386,71 @@ fn cmd_spawn(args: &[&str], ctx: &mut CommandContext) {
     } else {
         let s = format!("\x1b[32mSpawned task '{}' on CPU{} with PID {}\x1b[0m", name, core, pid);
         ctx.println(&s);
+    }
+}
+
+fn cmd_service(args: &[&str], ctx: &mut CommandContext) {
+    if args.is_empty() || args[0] == "list" {
+        ctx.println("\x1b[1;36m=== Pico OS System Daemons & Services ===\x1b[0m");
+        let tasks = task::get_tasks();
+        for t in tasks {
+            let status = match t.state {
+                task::TaskState::Ready => "\x1b[1;32mACTIVE (Ready)\x1b[0m",
+                task::TaskState::Running => "\x1b[1;32mRUNNING\x1b[0m",
+                task::TaskState::Sleeping(_) => "\x1b[1;36mSLEEPING (Idle)\x1b[0m",
+                task::TaskState::Blocked => "\x1b[1;33mBLOCKED\x1b[0m",
+                task::TaskState::Dead => "\x1b[1;31mSTOPPED\x1b[0m",
+            };
+            let line = format!("  ● {:<16} [PID {:>2}, CPU{}] - {}", t.name, t.pid, t.core, status);
+            ctx.println(&line);
+        }
+        return;
+    }
+
+    let service_name = args[0];
+    let action = args.get(1).copied().unwrap_or("status");
+
+    match action {
+        "start" => {
+            if let Some(pid) = task::find_active_by_name(service_name) {
+                let s = format!("\x1b[33m[INFO] Service '{}' is already active (PID {})\x1b[0m", service_name, pid);
+                ctx.println(&s);
+            } else {
+                let pid = task::spawn(service_name, 255, 1024, demo_worker_task, 0);
+                let s = format!("\x1b[32m[OK] Started service '{}' (PID {}, SMP Balanced)\x1b[0m", service_name, pid);
+                ctx.println(&s);
+            }
+        }
+        "stop" => {
+            if let Some(pid) = task::kill_by_name(service_name) {
+                let s = format!("\x1b[32m[OK] Stopped service '{}' (PID {})\x1b[0m", service_name, pid);
+                ctx.println(&s);
+            } else {
+                let s = format!("\x1b[33m[INFO] Service '{}' is not currently active\x1b[0m", service_name);
+                ctx.println(&s);
+            }
+        }
+        "restart" => {
+            if let Some(pid) = task::kill_by_name(service_name) {
+                let s = format!("\x1b[0;90mStopping old instance (PID {})...\x1b[0m", pid);
+                ctx.println(&s);
+            }
+            let pid = task::spawn(service_name, 255, 1024, demo_worker_task, 0);
+            let s = format!("\x1b[32m[OK] Restarted service '{}' with fresh PID {} (SMP Balanced)\x1b[0m", service_name, pid);
+            ctx.println(&s);
+        }
+        "status" => {
+            if let Some(pid) = task::find_active_by_name(service_name) {
+                let s = format!("● \x1b[1;32m{}\x1b[0m is \x1b[1;32mactive (running)\x1b[0m with PID {}", service_name, pid);
+                ctx.println(&s);
+            } else {
+                let s = format!("○ \x1b[1;31m{}\x1b[0m is \x1b[1;31minactive (dead/stopped)\x1b[0m", service_name);
+                ctx.println(&s);
+            }
+        }
+        _ => {
+            ctx.println("Usage: service <name> <start|stop|restart|status> or 'service list'");
+        }
     }
 }
 
