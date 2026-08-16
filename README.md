@@ -7,7 +7,7 @@
 
 **Pico-OS** is a lightweight, bare-metal Unix-like operating system designed and implemented from scratch in **Rust and ARM Assembly** for the **Raspberry Pi Pico (RP2040 Dual-Core Cortex-M0+)**. 
 
-It features True Symmetric Multiprocessing (SMP), dynamic load balancing across CPU0/CPU1, a custom heap allocator with 95% OOM-Killer protection, an in-memory Virtual File System (VFS) with delayed physical flash committing, interactive TUI applications (`tmux`, `htop`, `nano`, `calc`, `fetch`), and hardware drivers for OLED (I2C0) and ESP8266 (UART0).
+It features True Symmetric Multiprocessing (SMP), dynamic load balancing across CPU0/CPU1, a custom heap allocator with 95% OOM-Killer protection, an in-memory Virtual File System (VFS) with delayed physical flash committing, and interactive TUI applications (`tmux`, `htop`, `nano`, `calc`, `fetch`).
 
 ---
 
@@ -52,27 +52,40 @@ It features True Symmetric Multiprocessing (SMP), dynamic load balancing across 
 * **Singleton Daemon Protection**: Prevents duplicate task instances unless forced with `-f`.
 * **Service Control**: `service <name> <start|stop|restart|status>` and `service list`.
 
-### 🔌 6. Hardware Peripherals
-* **Dual Terminal I/O**: Shell simultaneously active over USB CDC-ACM Serial and Hardware UART0.
-* **SSD1306 OLED Display (I2C0 GP4/GP5)**: Real-time graphical dashboard showing CPU%, RAM bar, and uptime.
-* **ESP-01 (ESP8266) Management**: Reset, boot, and power control (`GP2 RST`, `GP3 IO0`, `GP6 CH_PD`).
+### 🔌 6. Hardware & Peripheral Control
+* **Dual Terminal I/O**: Interactive shell is active over USB CDC-ACM Serial and Hardware UART0.
+* **GPIO & Bus Control**: `pin` command for GPIO read/set/clear/toggle and `i2c_scan` for bus probing.
+* **ESP-01 Power & Pin Configuration**: Hardware setup for `GP2 RST`, `GP3 IO0`, and `GP6 CH_PD`.
 
 ---
 
-## 📌 Hardware Pinout Map
+## 🗺️ Planned Hardware Features (Roadmap)
 
-| Physical Pin | Pico Pin | Connection | Function |
-| :--- | :--- | :--- | :--- |
-| **Pin 1** | GP0 | ESP-01 RXD / Serial TX | Pico → ESP Serial TX |
-| **Pin 2** | GP1 | ESP-01 TXD / Serial RX | ESP → Pico Serial RX |
-| **Pin 4** | GP2 | ESP-01 RST | Hardware Reset |
-| **Pin 5** | GP3 | ESP-01 IO0 | Boot / Flash Mode |
-| **Pin 6** | GP4 | OLED SDA | I2C0 Data Line |
-| **Pin 7** | GP5 | OLED SCL | I2C0 Clock Line |
-| **Pin 9** | GP6 | ESP-01 CH_PD | Chip Enable / Sleep Control |
-| **Pin 36** | 3V3 (OUT) | OLED + ESP-01 VCC | 3.3V Power Output |
-| **Pin 38** | GND | Common GND | Ground |
-| **Pin 39** | VSYS | Power Input | 5V Power / Switch |
+The following peripheral integrations are in active development:
+
+- [ ] **ESP8266 (ESP-01) Wi-Fi Modem Driver (UART0)**:
+  - Non-blocking AT command parser & Wi-Fi station manager (`wifi connect`, `wifi scan`).
+  - Lightweight TCP/IP socket stack and HTTP client (`curl`, `ping`, network time NTP).
+- [ ] **SSD1306 0.96" OLED Display Driver (I2C0)**:
+  - 128x64 monochrome frame buffer rendering via `embedded-graphics`.
+  - Real-time hardware system dashboard (CPU load, RAM usage bar, Uptime, Wi-Fi status).
+
+---
+
+## 📌 Hardware Pinout Map (RP2040 + ESP-01 + SSD1306)
+
+| Physical Pin | Pico Pin | Connection | Function | Status |
+| :--- | :--- | :--- | :--- | :--- |
+| **Pin 1** | GP0 | ESP-01 RXD / Serial TX | Pico → ESP Serial TX | Configured |
+| **Pin 2** | GP1 | ESP-01 TXD / Serial RX | ESP → Pico Serial RX | Configured |
+| **Pin 4** | GP2 | ESP-01 RST | Hardware Reset Control | Configured |
+| **Pin 5** | GP3 | ESP-01 IO0 | Boot / Flash Mode Control | Configured |
+| **Pin 6** | GP4 | OLED SDA | I2C0 Data Line | Configured |
+| **Pin 7** | GP5 | OLED SCL | I2C0 Clock Line | Configured |
+| **Pin 9** | GP6 | ESP-01 CH_PD | Chip Enable / Power Control | Configured |
+| **Pin 36** | 3V3 (OUT) | OLED + ESP-01 VCC | 3.3V Power Output | Power |
+| **Pin 38** | GND | Common GND | Ground | Power |
+| **Pin 39** | VSYS | Power Input | 5V Power / Switch | Power |
 
 ---
 
@@ -118,7 +131,7 @@ screen /dev/ttyACM0 115200
  |  __/| | (_| (_) | |__| | ___) |
  |_|   |_|\___\___/ \____/ |____/ 
  Custom Bare-Metal OS in Rust & Assembly on RP2040 Dual-Core SMP
- Developed for Raspberry Pi Pico + ESP8266 + SSD1306 OLED
+ Developed for Raspberry Pi Pico + ESP8266 (ESP-01) + SSD1306 OLED
  Apps & Tools: fetch | tmux | htop | calc | nano | service list
  Type 'help' for command reference or 'tmux help' for split-screen guide.
 
