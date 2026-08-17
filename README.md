@@ -9,11 +9,11 @@
 
 > ### 💸 *"Tired of modern OS bloat eating 16 GB of RAM just to idle? Tired of spending $2,000 on a laptop just to run 400 systemd background services and a 40 GB kernel?"*
 >
-> **Say no more.** Why sell a kidney for hardware when you can run a **preemptive, dual-core SMP Unix-like workstation** on a **$4 Raspberry Pi Pico** with 264 KB of RAM, a full terminal multiplexer (`tmux`), live process monitor (`htop`), mathematical CAS (`calc`), text editor (`nano`), and an ASCII kitty (`fetch`)—all packed into an ultra-compact **70 KB** binary with zero dependencies? 
+> **Say no more.** Why sell a kidney for hardware when you can run a **preemptive, dual-core SMP Unix-like workstation** on a **$4 Raspberry Pi Pico** with 264 KB of RAM, a full terminal multiplexer (`tmux`), live process monitor (`htop`), an embedded offline AI assistant (`ai` / "Pi-Copilot"), mathematical CAS (`calc`), text editor (`nano`), and an ASCII kitty (`fetch`)—all packed into an ultra-compact **~350 KB** binary with zero dependencies? 
 >
 > Welcome to **Pico-OS**: The ultimate cure for modern software bloat. 🚀
 
-It features True Symmetric Multiprocessing (SMP), dynamic load balancing across CPU0/CPU1, a custom heap allocator with 95% OOM-Killer protection, a dual-mount Virtual File System (VFS) with delayed physical flash committing, and full-featured interactive TUI applications (`tmux`, `htop`, `nano`, `calc`, `fetch`).
+It features True Symmetric Multiprocessing (SMP), dynamic load balancing across CPU0/CPU1, a custom heap allocator with 95% OOM-Killer protection, a dual-mount Virtual File System (VFS) with delayed physical flash committing, and full-featured interactive TUI applications (`tmux`, `htop`, `ai`, `nano`, `calc`, `fetch`).
 
 ---
 
@@ -127,18 +127,18 @@ Pico-OS implements a complete multi-tier embedded storage architecture that orga
 │ Memory Range │ Flash Offset │   Size   │ Description & Purpose              │
 ├──────────────┼──────────────┼──────────┼────────────────────────────────────┤
 │ 0x1000_0000  │ 0x000000     │ 256 B    │ rp2040-boot2 (Quad-SPI Bootloader) │
-│ 0x1000_0100  │ 0x000100     │ ~70 KB   │ Pico-OS Kernel Binary & RoData     │
-│ 0x1001_2000  │ 0x012000     │ 440 KB   │ Reserved Kernel Growth Space       │
+│ 0x1000_0100  │ 0x000100     │ ~350 KB  │ Pico-OS Kernel & Pi-Copilot RoData │
+│ 0x1005_8000  │ 0x058000     │ 160 KB   │ Reserved Kernel Growth Space       │
 │ 0x1008_0000  │ 0x080000     │ 128 KB   │ Virtual Memory Swap Paging Space   │
 │ 0x100A_0000  │ 0x0A0000     │ 384 KB   │ Raw Block Device & Inotify Logs    │
 │ 0x1010_0000  │ 0x100000     │ 1024 KB  │ /data Persistent Partition (1.0MB) │
 └──────────────┴──────────────┴──────────┴────────────────────────────────────┘
 ```
 
-> ### 💡 Why is the compiled binary/UF2 only ~70 KB? Where does the rest of the 2 MB go?
-> Pico-OS is written in zero-overhead, bare-metal `no_std` Rust and handcrafted ARM Assembly. The entire operating system kernel (multiprocessing scheduler, custom heap allocator, TUI applications, calculator, VFS, and drivers) compiles to just **~70 KB of ultra-optimized native machine code**.
+> ### 💡 Why is the compiled binary/UF2 only ~350 KB? Where does the rest of the 2 MB go?
+> Pico-OS is written in zero-overhead, bare-metal `no_std` Rust and handcrafted ARM Assembly. The entire operating system kernel (multiprocessing scheduler, custom heap allocator, embedded **Pi-Copilot** offline AI knowledge engine, TUI applications, calculator, VFS, and drivers) compiles to just **~350 KB of ultra-optimized native machine code and flash RoData**.
 > 
-> Instead of leaving the remaining **1.93 MB** of high-speed onboard SPI NOR flash empty, Pico-OS partitions and utilizes the physical chip completely:
+> Instead of leaving the remaining **1.65 MB** of high-speed onboard SPI NOR flash empty, Pico-OS partitions and utilizes the physical chip completely:
 > 1. **1024 KB (1.0 MB)** is dedicated to the persistent physical file system (`/data`).
 > 2. **128 KB** is dedicated to application virtual memory swap paging.
 > 3. **384 KB** is dedicated to raw block storage and journaled inotify logs.
@@ -218,6 +218,9 @@ Pico-OS implements a complete multi-tier embedded storage architecture that orga
 * **`htop` Live Process Monitor**:
   * Real-time dual-core CPU% bars, RAM (Used/Total), VFS, Swap, and Raw Disk meters.
   * Task table with interactive PID kill (`F9` / `k` / `K`).
+* **`ai` (or `chat`) Pi-Copilot Embedded AI**:
+  * 100% offline, bare-metal conversational intelligence in pure Rust.
+  * 80+ knowledge domains, real code generation (Python/Rust/C/JS), anime lore, culinary recipes, and microsecond response time.
 * **`calc` (or `bc`) Math Engine**:
   * Supports `+`, `-`, `*`, `/`, `%`, `^`, `x` / `X` multiplication (`50x4 = 200`), implicit multiplication (`2(3+4)`).
   * Functions: `sqrt`, `abs`, `pow`, `min`, `max`, `round`, `pi`, `e`, variable assignment (`x = 10`), and `ans`.
@@ -350,20 +353,21 @@ Once connected, press `Enter` to see the prompt:
  |_|   |_|\___\___/ \____/ |____/ 
  Custom Bare-Metal OS in Rust & Assembly on RP2040 Dual-Core SMP
  Developed for Raspberry Pi Pico + ESP8266 (ESP-01) + SSD1306 OLED
- Apps & Tools: fetch | tmux | htop | calc | nano | service list
+ Apps & Tools: fetch | ai | tmux | htop | calc | nano | service list
  Type 'help' for command reference or 'tmux help' for split-screen guide.
 
 root@pico:/# 
 ```
 
 Try running these commands right away:
-1. **`fetch`**: Display the system hardware specs and ASCII Kitty logo!
-2. **`htop`**: Launch the live dual-core monitor (`q` to exit, `k` to kill tasks).
-3. **`tmux`**: Open the 4-pane terminal multiplexer (`split-v`, `split-h`, `focus 1..4`, `Ctrl+B d` to detach).
-4. **`calc 50x4 + sqrt(144)`**: Evaluate math expressions directly.
-5. **`nano test.txt`**: Create and edit files (`Ctrl+O` save, `Ctrl+X` exit).
-6. **`service list`**: Inspect background daemons across CPU0 and CPU1.
-7. **`help`**: View the full 4-category command manual.
+1. **`ai` / `chat`**: Chat with Pi-Copilot or generate code (`ai write python calculator`).
+2. **`fetch`**: Display the system hardware specs and ASCII Kitty logo!
+3. **`htop`**: Launch the live dual-core monitor (`q` to exit, `k` to kill tasks).
+4. **`tmux`**: Open the 4-pane terminal multiplexer (`split-v`, `split-h`, `focus 1..4`, `Ctrl+B d` to detach).
+5. **`calc 50x4 + sqrt(144)`**: Evaluate math expressions directly.
+6. **`nano test.txt`**: Create and edit files (`Ctrl+O` save, `Ctrl+X` exit).
+7. **`service list`**: Inspect background daemons across CPU0 and CPU1.
+8. **`help`**: View the full 4-category command manual.
 
 ---
 
