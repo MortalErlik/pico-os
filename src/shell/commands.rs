@@ -63,6 +63,9 @@ pub fn execute_command(line: &str, ctx: &mut CommandContext) {
         "format" => cmd_format(args, ctx),
         "events" => cmd_events(args, ctx),
         "calc" | "bc" => cmd_calc(args, ctx),
+        "ai" | "chat" => cmd_ai(args, ctx),
+        "htop" | "top" => cmd_htop_snapshot(args, ctx),
+        "nano" => cmd_nano_hint(args, ctx),
         "service" | "systemctl" => cmd_service(args, ctx),
         "neofetch" | "fetch" => cmd_fetch(args, ctx),
         "tmux" => {
@@ -138,6 +141,7 @@ fn cmd_help(args: &[&str], ctx: &mut CommandContext) {
     
     ctx.println("\x1b[1;33m[ APPLICATIONS & FULL-SCREEN TUI ]\x1b[0m");
     ctx.println("  \x1b[1;32mfetch\x1b[0m (or neofetch) - Display hardware specs, cute ASCII Cat & ANSI palette");
+    ctx.println("  \x1b[1;32mai [query]\x1b[0m (or chat)  - 100% Offline AI Assistant & interactive REPL");
     ctx.println("  \x1b[1;32mtmux [help]\x1b[0m         - 4-Pane split-screen terminal multiplexer (split-v / split-h)");
     ctx.println("  \x1b[1;32mhtop\x1b[0m (or top)       - Live Dual-Core process monitor & 3 storage bars");
     ctx.println("  \x1b[1;32mcalc [expr]\x1b[0m (or bc) - Math calculator & REPL (sqrt, pow, pi, vars, ans)");
@@ -772,4 +776,42 @@ fn cmd_calc(args: &[&str], ctx: &mut CommandContext) {
 
 fn cmd_fetch(_args: &[&str], ctx: &mut CommandContext) {
     crate::shell::fetch::render_fetch(|s| (ctx.output)(s));
+}
+
+fn cmd_ai(args: &[&str], ctx: &mut CommandContext) {
+    if args.is_empty() {
+        ctx.println("\x1b[1;35mPico-AI:\x1b[0m Type '\x1b[1;32mai <question>\x1b[0m' or type '\x1b[1;32mai\x1b[0m' in main shell for interactive mode!");
+        ctx.println("Example: ai what is the meaning of life");
+        return;
+    }
+    let query = args.join(" ");
+    let mut ai_ctx = crate::ai::AiContext::new();
+    let resp = ai_ctx.respond(&query);
+    let out = format!("\x1b[1;35mPico-AI:\x1b[0m {}", resp);
+    ctx.println(&out);
+}
+
+fn cmd_htop_snapshot(_args: &[&str], ctx: &mut CommandContext) {
+    ctx.println("\x1b[1;36m=== Pico-OS System Monitor Snapshot ===\x1b[0m");
+    let (c0, c1) = task::get_cpu_loads();
+    let row0 = format!("  CPU0 (Core 0): \x1b[1;32m[{:>3}%]\x1b[0m 125 MHz Interactive", c0);
+    let row1 = format!("  CPU1 (Core 1): \x1b[1;32m[{:>3}%]\x1b[0m 125 MHz SMP Worker", c1);
+    ctx.println(&row0);
+    ctx.println(&row1);
+
+    let stats = mm::get_stats();
+    let ram_pct = if stats.total_bytes > 0 { (stats.used_bytes * 100) / stats.total_bytes } else { 0 };
+    let ram_row = format!("  RAM: {}K / {}K (\x1b[1;33m{}%\x1b[0m) | Heap OOM Guard: 95%", stats.used_bytes / 1024, stats.total_bytes / 1024, ram_pct);
+    ctx.println(&ram_row);
+
+    ctx.println("\x1b[1;33mActive Tasks:\x1b[0m");
+    cmd_ps(&[], ctx);
+}
+
+fn cmd_nano_hint(args: &[&str], ctx: &mut CommandContext) {
+    if args.is_empty() {
+        ctx.println("Usage: nano <filename> (Full-screen editor is available in the main shell)");
+    } else {
+        ctx.println("Tip: nano is a full-screen application. Detach from tmux (Ctrl+B d) or run in main shell!");
+    }
 }

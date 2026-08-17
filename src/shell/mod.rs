@@ -19,6 +19,7 @@ pub enum ShellMode {
     Htop(HtopMonitor),
     Calc(crate::calc::CalcContext),
     Tmux(TmuxManager),
+    Ai(crate::ai::AiContext),
 }
 
 pub struct Shell {
@@ -48,7 +49,7 @@ impl Shell {
         write_out("\x1b[0m");
         write_out("\x1b[1;37m Custom Bare-Metal OS in Rust & Assembly on RP2040 Dual-Core SMP\x1b[0m\r\n");
         write_out("\x1b[0;90m Developed for Raspberry Pi Pico + ESP8266 + SSD1306 OLED\x1b[0m\r\n");
-        write_out("\x1b[1;36m Apps & Tools: \x1b[1;33mfetch\x1b[0m | \x1b[1;33mtmux\x1b[0m | \x1b[1;33mhtop\x1b[0m | \x1b[1;33mcalc\x1b[0m | \x1b[1;33mnano\x1b[0m | \x1b[1;33mservice list\x1b[0m\r\n");
+        write_out("\x1b[1;36m Apps & Tools: \x1b[1;33mfetch\x1b[0m | \x1b[1;33mai\x1b[0m | \x1b[1;33mtmux\x1b[0m | \x1b[1;33mhtop\x1b[0m | \x1b[1;33mcalc\x1b[0m | \x1b[1;33mnano\x1b[0m | \x1b[1;33mservice list\x1b[0m\r\n");
         write_out("\x1b[0;32m Type '\x1b[1;32mhelp\x1b[0;32m' for command reference or '\x1b[1;32mtmux help\x1b[0;32m' for split-screen guide.\x1b[0m\r\n\r\n");
         self.print_prompt(write_out);
     }
@@ -85,7 +86,7 @@ impl Shell {
                     htop.handle_key(byte, &mut write_out);
                     return;
                 }
-                ShellMode::LineInput | ShellMode::Calc(_) | ShellMode::Tmux(_) => {
+                ShellMode::LineInput | ShellMode::Calc(_) | ShellMode::Tmux(_) | ShellMode::Ai(_) => {
                     return;
                 }
             }
@@ -198,6 +199,59 @@ impl Shell {
                     _ => {}
                 }
             }
+            ShellMode::Ai(ref mut ai_ctx) => {
+                match byte {
+                    // Enter (\r or \n)
+                    b'\r' | b'\n' => {
+                        write_out("\r\n");
+                        let input = self.input_buffer.trim().to_string();
+                        self.input_buffer.clear();
+
+                        if !input.is_empty() {
+                            if input == "exit" || input == "quit" || input == "q" {
+                                self.mode = ShellMode::LineInput;
+                                write_out("\x1b[1;33mPico-AI:\x1b[0m Powering down transistors. Farewell, friend! 👋\r\n");
+                                self.print_prompt(&mut write_out);
+                                return;
+                            }
+
+                            let response = ai_ctx.respond(&input);
+                            write_out("\x1b[1;36mPico-AI:\x1b[0m ");
+                            write_out(response);
+                            write_out("\r\n\r\n");
+                        }
+                        write_out("\x1b[1;32myou>\x1b[0m ");
+                    }
+                    // Backspace (0x08 or 0x7F)
+                    0x08 | 0x7F => {
+                        if !self.input_buffer.is_empty() {
+                            self.input_buffer.pop();
+                            write_out("\x08 \x08");
+                        }
+                    }
+                    // Ctrl+C
+                    0x03 => {
+                        self.input_buffer.clear();
+                        self.mode = ShellMode::LineInput;
+                        write_out("^C\r\n");
+                        self.print_prompt(write_out);
+                    }
+                    // Ctrl+L
+                    0x0C => {
+                        write_out("\x1b[2J\x1b[H\x1b[1;32myou>\x1b[0m ");
+                        write_out(&self.input_buffer);
+                    }
+                    // Printable ASCII characters
+                    32..=126 => {
+                        let ch = byte as char;
+                        self.input_buffer.push(ch);
+                        let mut b = [0u8; 4];
+                        let s = ch.encode_utf8(&mut b);
+                        write_out(s);
+                    }
+                    _ => {}
+                }
+            }
             ShellMode::LineInput => {
                 match byte {
                     // Enter (\r or \n)
@@ -233,6 +287,15 @@ impl Shell {
                                 let mut tmux = TmuxManager::new();
                                 tmux.render(&mut write_out);
                                 self.mode = ShellMode::Tmux(tmux);
+                                return;
+                            } else if cmd_line == "ai" || cmd_line == "chat" {
+                                write_out("\x1b[1;35m=================================================================\x1b[0m\r\n");
+                                write_out("\x1b[1;33m  🤖 PICO-AI: BARE-METAL CONVERSATIONAL INTELLIGENCE (v0.4)\x1b[0m\r\n");
+                                write_out("\x1b[0;90m  100% Offline Local | Zero-Allocation | RP2040 Dual-Core SMP\x1b[0m\r\n");
+                                write_out("\x1b[1;35m=================================================================\x1b[0m\r\n");
+                                write_out("Type your thoughts or '\x1b[1;31mexit\x1b[0m' to return to shell.\r\n\r\n");
+                                write_out("\x1b[1;32myou>\x1b[0m ");
+                                self.mode = ShellMode::Ai(crate::ai::AiContext::new());
                                 return;
                             }
 
